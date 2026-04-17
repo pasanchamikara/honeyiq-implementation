@@ -146,6 +146,108 @@ Called from `main.py analyze` mode:
 
 ---
 
+## Classifier Evaluation
+
+Defined in `defender/classifier.py:163-184` (`evaluate()` method).
+
+At initialization the classifier is tested against a freshly generated held-out set (default seed=999) and returns:
+
+| Key | Description |
+|---|---|
+| `accuracy` | Overall accuracy across all attack-type classes |
+| `report` | Full scikit-learn `classification_report` with per-class precision, recall, F1-score, and support |
+
+The test set is generated independently from training data (one batch per attack type) so there is no overlap.
+
+---
+
+## DQN Training Loss
+
+Defined in `defender/dqn.py:160` and computed in `update()` (lines 185–222).
+
+- **Loss function:** Huber Loss (`torch.nn.SmoothL1Loss`)
+- **TD target:** computed from the frozen target network with discount factor γ = 0.99
+- Loss is recorded per update step, averaged into `avg_loss` per episode, and smoothed in `plot_training_curves()`
+
+Huber loss is preferred over MSE because it is less sensitive to outlier Q-value errors early in training.
+
+---
+
+## Threat Level Score
+
+Defined in `defender/honeypot.py:66-98` (`compute_threat_level()`).
+
+Composite score in [0.0, 1.0] combining four signals:
+
+| Component | Weight | Source |
+|---|---|---|
+| Attack severity | 45% | `ATTACK_SEVERITY` map per `AttackType` |
+| Kill chain stage weight | 35% | `KILL_CHAIN_WEIGHT` map per stage |
+| Escalation rate | 15% | Attack frequency in recent sliding window |
+| Cumulative attack count | 5% | Normalised to 100 steps |
+
+**Severity values** (`attacker/attack_types.py:76-98`):
+
+| Attack Type | Severity |
+|---|---|
+| NORMAL | 0.00 |
+| RECONNAISSANCE | 0.20 |
+| ANALYSIS | 0.25 |
+| FUZZERS | 0.35 |
+| GENERIC | 0.40 |
+| EXPLOITS | 0.70 |
+| SHELLCODE | 0.75 |
+| BACKDOORS | 0.80 |
+| DOS | 0.85 |
+| WORMS | 0.90 |
+
+**Kill chain weights:**
+
+| Stage | Weight |
+|---|---|
+| RECONNAISSANCE | 0.10 |
+| WEAPONIZATION | 0.20 |
+| DELIVERY | 0.35 |
+| EXPLOITATION | 0.55 |
+| INSTALLATION | 0.70 |
+| COMMAND_AND_CTRL | 0.85 |
+| ACTIONS_ON_OBJ | 1.00 |
+
+**Threat bands** (`defender/honeypot.py:44-63`):
+
+| Band | Range |
+|---|---|
+| benign | < 0.15 |
+| low | 0.15 – 0.35 |
+| medium | 0.35 – 0.55 |
+| high | 0.55 – 0.75 |
+| critical | ≥ 0.75 |
+
+---
+
+## Reward Function
+
+Defined in `defender/honeypot.py:106-193` (`compute_reward()`).
+
+The reward function is the RL learning signal, not an evaluation metric, but it directly shapes what the policy optimises for.
+
+**Base reward matrix** (action × threat band):
+
+| Action | benign | low | medium | high | critical |
+|---|---|---|---|---|---|
+| ALLOW | +1.0 | -1.0 | -2.0 | -4.0 | -6.0 |
+| LOG | -0.5 | +1.5 | +2.0 | +0.5 | -1.0 |
+| TROLL | -1.0 | +0.5 | +1.0 | +3.0 | +2.0 |
+| BLOCK | -2.0 | -0.5 | +0.5 | +4.0 | +5.0 |
+| ALERT | -3.0 | -1.0 | -0.5 | +2.0 | +6.0 |
+
+**Modifiers:**
+- Late kill-chain stages (INSTALLATION onward): negative rewards amplified by 1.5×
+- Attack-type bonuses: TROLL rewarded for BACKDOORS/SHELLCODE/WORMS; BLOCK for WORMS; LOG for RECONNAISSANCE
+- Correct ALLOW on non-attack: +0.5 bonus
+
+---
+
 ## Interpreting Results
 
 ### Good training signal
