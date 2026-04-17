@@ -140,6 +140,7 @@ def train(
         classifier_config={
             "n_estimators": 150,
             "max_depth":    20,
+            "n_jobs":       1,
         },
         train_classifier=train_classifier,
         seed=seed,

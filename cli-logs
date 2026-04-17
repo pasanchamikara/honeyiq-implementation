@@ -1,0 +1,70 @@
+(venv) ☁  honeyiq-implementation [main] ⚡  python main.py train
+[Defender] Training attack classifier (600 samples/class × 10 classes)...
+[Defender] Classifier ready.
+[Classifier] Test accuracy: 0.998
+
+============================================================
+HoneyIQ Training — Intent: OPPORTUNISTIC
+Episodes: 300  |  Steps/ep: 500
+Device: cuda
+============================================================
+
+Training:  16%|████████████████████████▏                                                                                                                           | 49/300 [02:46<13:57,  3.34s/ep, reward=2264.9, det=0.99, fp=1.00, ε=0.050]
+[Eval  ep   50]  reward=  2389.5  det=1.000  fp=1.000
+Training:  33%|████████████████████████████████████████████████▊                                                                                                   | 99/300 [05:33<10:58,  3.28s/ep, reward=2260.0, det=0.98, fp=1.00, ε=0.050]
+[Eval  ep  100]  reward=  2397.0  det=1.000  fp=1.000
+[Defender] Models saved to models/
+Training:  50%|█████████████████████████████████████████████████████████████████████████                                                                          | 149/300 [08:21<08:12,  3.26s/ep, reward=2317.9, det=0.99, fp=1.00, ε=0.050]
+[Eval  ep  150]  reward=  2382.8  det=1.000  fp=1.000
+Training:  66%|█████████████████████████████████████████████████████████████████████████████████████████████████▌                                                 | 199/300 [11:10<05:37,  3.34s/ep, reward=2284.5, det=0.99, fp=1.00, ε=0.050]
+[Eval  ep  200]  reward=  2394.8  det=1.000  fp=1.000
+[Defender] Models saved to models/
+Training:  83%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████                         | 249/300 [14:01<02:54,  3.42s/ep, reward=2311.3, det=0.99, fp=1.00, ε=0.050]
+[Eval  ep  250]  reward=  2414.0  det=1.000  fp=1.000
+Training: 100%|██████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████▌| 299/300 [16:54<00:03,  3.50s/ep, reward=2272.4, det=0.99, fp=1.00, ε=0.050]
+[Eval  ep  300]  reward=  2413.5  det=1.000  fp=1.000
+[Defender] Models saved to models/
+Training: 100%|███████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████████| 300/300 [16:57<00:00,  3.39s/ep, reward=2272.4, det=0.99, fp=1.00, ε=0.050]
+[Defender] Models saved to models/
+
+============================================================
+Training complete in 1017.0s
+  Mean reward     : 2281.26
+  Best reward     : 2361.00
+  Mean det. rate  : 0.989
+  Mean FP rate    : 0.993
+  Mean threat lvl : 0.808
+============================================================
+
+[Metrics] CSV saved to logs/metrics.csv
+[Metrics] Training curves saved to logs/training_curves.png
+[Metrics] Heatmap saved to logs/action_stage_heatmap.png
+(venv) ☁  honeyiq-implementation [main] ⚡  python main.py
+usage: main.py [-h] {demo,compare,train,analyze} ...
+main.py: error: the following arguments are required: mode
+(venv) ☁  honeyiq-implementation [main] ⚡  python main.py compare
+
+======================================================================
+  HoneyIQ — Multi-Intent Policy Comparison
+  Episodes per intent: 5  |  Steps per episode: 200
+======================================================================
+
+[Defender] DQN loaded from models/dqn_agent.pt
+[Defender] Classifier loaded from models/classifier.joblib
+[Defender] DQN loaded from models/dqn_agent.pt
+[Defender] Classifier loaded from models/classifier.joblib
+[Defender] DQN loaded from models/dqn_agent.pt
+[Defender] Classifier loaded from models/classifier.joblib
+[Defender] DQN loaded from models/dqn_agent.pt
+[Defender] Classifier loaded from models/classifier.joblib
+Intent             MeanReward    DetRate     FPRate
+----------------------------------------------------
+STEALTHY               906.12      0.999      1.000
+AGGRESSIVE            1015.36      1.000      0.200
+TARGETED              1102.04      1.000      0.400
+OPPORTUNISTIC          932.98      1.000      0.000
+
+(venv) ☁  honeyiq-implementation [main] ⚡  python main.py analyze
+[Analyze] Transition matrices saved to logs/transition_matrices.png
+[Analyze] Feature distributions saved to logs/feature_distributions.png
+(venv) ☁  honeyiq-implementation [main] ⚡

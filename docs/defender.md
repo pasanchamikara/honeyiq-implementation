@@ -144,7 +144,7 @@ Wraps `sklearn.ensemble.RandomForestClassifier` with:
 #### Training
 
 ```python
-clf = AttackClassifier(n_estimators=150, max_depth=20)
+clf = AttackClassifier(n_estimators=150, max_depth=20, n_jobs=1)
 clf.fit_from_simulation(n_samples_per_class=600, seed=42)
 # or manually:
 X, y = clf.generate_training_data(600, seed=42)
@@ -196,7 +196,7 @@ defender = Defender(
         "epsilon_start": 1.0, "epsilon_end": 0.05, "epsilon_decay": 0.997,
         "batch_size": 64, "target_update_freq": 150, "buffer_capacity": 15_000,
     },
-    classifier_config={"n_estimators": 150, "max_depth": 20},
+    classifier_config={"n_estimators": 150, "max_depth": 20, "n_jobs": 1},
     train_classifier=True,
     seed=42,
 )

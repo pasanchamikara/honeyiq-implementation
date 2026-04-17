@@ -37,6 +37,10 @@ class AttackClassifier:
         Maximum depth of each tree.
     random_state : int
         Seed for the classifier.
+    n_jobs : int | None
+        Number of jobs used by the underlying RandomForest. Defaults to
+        serial execution to avoid joblib/scikit-learn parallel warnings on
+        newer runtimes; set to -1 to use all cores.
     """
 
     def __init__(
@@ -44,12 +48,13 @@ class AttackClassifier:
         n_estimators:  int = 150,
         max_depth:     Optional[int] = 20,
         random_state:  int = 42,
+        n_jobs:        Optional[int] = 1,
     ) -> None:
         self.model = RandomForestClassifier(
             n_estimators  = n_estimators,
             max_depth      = max_depth,
             random_state   = random_state,
-            n_jobs         = -1,
+            n_jobs         = n_jobs,
             class_weight   = "balanced",   # handle class imbalance
         )
         self.scaler        = StandardScaler()

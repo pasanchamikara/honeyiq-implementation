@@ -15,7 +15,8 @@
       "Bash(pip3 --version)",
       "Bash(dpkg -l python3-*)",
       "Bash(pip3 install:*)",
-      "Bash(python3:*)"
+      "Bash(python3:*)",
+      "Bash(ls:*)"
     ]
   }
 }

@@ -177,7 +177,8 @@ class AttackClassifier:
     def __init__(self,
                  n_estimators: int = 150,
                  max_depth:    int | None = 20,
-                 random_state: int = 42) -> None
+                 random_state: int = 42,
+                 n_jobs:       int | None = 1) -> None
 
     def generate_training_data(self,
                                 n_samples_per_class: int = 600,
