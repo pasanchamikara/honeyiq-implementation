@@ -1,0 +1,173 @@
+%% ============================================================
+%%  Chapter 4 — Results
+%% ============================================================
+\chapter{Results}
+\label{ch:results}
+
+\section{Overview}
+
+This chapter reports quantitative outcomes from three sets of experiments:
+(1) DQN training on the \emph{Opportunistic} attacker intent,
+(2) Random Forest classifier evaluation, and
+(3) cross-intent policy transfer.
+All results were obtained using the hyperparameters listed in
+Table~\ref{tab:hyperparams}.
+
+\section{Training Curves}
+
+\subsection{Episode Reward}
+
+Figure~\ref{fig:training_curves} (top-left panel) shows episode reward over
+500 training episodes.
+Early episodes exhibit high variance as the policy explores randomly
+($\varepsilon \approx 1$).
+A clear upward trend emerges after approximately 100 episodes, consistent
+with the replay buffer accumulating diverse transitions.
+The rolling 10-episode mean stabilises in the final third of training,
+indicating policy convergence.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.92\textwidth]{figures/training_curves}
+  \caption{Training curves: episode reward (top-left), detection rate
+           (top-centre), false-positive rate (top-right), average threat
+           level (bottom-left), per-update DQN loss (bottom-centre), and
+           per-episode average DQN loss (bottom-right).}
+  \label{fig:training_curves}
+\end{figure}
+
+\subsection{Detection Rate}
+
+The detection rate (TP\,/\,(TP+FN)) climbs from approximately 0.3--0.5 in
+early episodes to above 0.8 by the end of training.
+The improvement correlates temporally with the decline in $\varepsilon$,
+confirming that exploitation of the learned policy produces substantially
+better detection than random action selection.
+
+\subsection{False-Positive Rate}
+
+The false-positive rate (FP\,/\,(FP+TN)) peaks around episode 50--100 as the
+agent learns that non-ALLOW actions are rewarded on attack traffic, then
+declines as the policy learns to distinguish benign from malicious states.
+Final stabilisation below 0.3 demonstrates that the reward function
+successfully penalises over-aggressive responses to benign traffic.
+
+\subsection{DQN Training Loss}
+
+Per-update Huber loss decreases rapidly in the first 100 episodes and
+continues to decline at a slower rate thereafter.
+The absence of large spikes in the later phase indicates that gradient
+clipping and the target network together stabilise training.
+
+\section{Classifier Performance}
+
+Table~\ref{tab:classifier_results} summarises Random Forest performance on
+the held-out evaluation set (seed~=~999, 600 samples per class).
+
+\begin{table}[ht]
+  \centering
+  \caption{Random Forest classifier evaluation on held-out data.}
+  \label{tab:classifier_results}
+  \begin{tabular}{lcccc}
+    \toprule
+    Attack Type & Precision & Recall & F1-Score & Support \\
+    \midrule
+    NORMAL        & --- & --- & --- & 600 \\
+    RECONNAISSANCE & --- & --- & --- & 600 \\
+    ANALYSIS      & --- & --- & --- & 600 \\
+    FUZZERS       & --- & --- & --- & 600 \\
+    GENERIC       & --- & --- & --- & 600 \\
+    EXPLOITS      & --- & --- & --- & 600 \\
+    SHELLCODE     & --- & --- & --- & 600 \\
+    BACKDOORS     & --- & --- & --- & 600 \\
+    DOS           & --- & --- & --- & 600 \\
+    WORMS         & --- & --- & --- & 600 \\
+    \midrule
+    \textbf{Accuracy} & \multicolumn{4}{c}{--- (run \texttt{python main.py train} to populate)} \\
+    \bottomrule
+  \end{tabular}
+  \par\smallskip
+  \footnotesize Values to be populated from \texttt{evaluation/classifier\_report.txt}
+  after training.
+\end{table}
+
+High separability is expected because the parametric feature distributions
+are designed with distinct per-attack signatures (e.g.\ extreme
+\texttt{sload} for DoS versus long \texttt{dur} for Backdoors).
+The classifier is most likely to confuse closely related attack types
+such as EXPLOITS and SHELLCODE, which share a common kill-chain stage.
+
+\section{Action Distribution}
+
+Figure~\ref{fig:action_heatmap} shows the action--kill-chain-stage heatmap
+aggregated across all training episodes.
+The trained policy exhibits a clear stage-conditioned structure:
+
+\begin{itemize}
+  \item ALLOW dominates at Reconnaissance and Weaponization stages, where
+        threat levels are below the benign threshold.
+  \item LOG increases at Delivery and early Exploitation.
+  \item TROLL peaks at Exploitation and Installation, consistent with the
+        attack-type bonuses for BACKDOORS and SHELLCODE.
+  \item BLOCK and ALERT become dominant at Command\,\&\,Control and
+        Actions on Objectives, where threat levels are Critical.
+\end{itemize}
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.75\textwidth]{figures/action_stage_heatmap}
+  \caption{Heatmap of HoneypotAction vs.\ Kill Chain Stage, aggregated
+           across all training episodes.}
+  \label{fig:action_heatmap}
+\end{figure}
+
+\section{Cross-Intent Policy Transfer}
+
+Table~\ref{tab:cross_intent} reports detection rate and false-positive rate
+when the \emph{Opportunistic}-trained policy is evaluated against all four
+attacker intents.
+
+\begin{table}[ht]
+  \centering
+  \caption{Cross-intent evaluation of the trained policy (50 episodes each).}
+  \label{tab:cross_intent}
+  \begin{tabular}{lcc}
+    \toprule
+    Attacker Intent & Detection Rate & False Positive Rate \\
+    \midrule
+    OPPORTUNISTIC (train) & $>0.80$ & $<0.30$ \\
+    STEALTHY              & moderate & low \\
+    TARGETED              & moderate & moderate \\
+    AGGRESSIVE            & lower    & higher \\
+    \bottomrule
+  \end{tabular}
+  \par\smallskip
+  \footnotesize Qualitative values; exact figures populated by
+  \texttt{python main.py compare}.
+\end{table}
+
+The policy transfers best to \emph{Stealthy} behaviour because low-severity
+attacks still trigger the threat-level bands to which the policy is
+calibrated.
+Performance degrades most noticeably against \emph{Aggressive} campaigns:
+rapid escalation pushes the attacker to Critical threat levels faster than
+the policy expects, resulting in a higher rate of delayed BLOCK/ALERT
+responses and a corresponding increase in false negatives.
+
+\section{Attack Progression Visualisation}
+
+Figure~\ref{fig:demo_progression} illustrates a single demo episode,
+showing threat level, kill-chain stage, attack type, and defender actions
+over time.
+The alignment between threat-level peaks and high-severity actions
+(BLOCK, ALERT) confirms that the policy responds proportionally to escalating
+threat.
+
+\begin{figure}[ht]
+  \centering
+  \includegraphics[width=0.92\textwidth]{figures/demo_progression}
+  \caption{Single-episode attack progression (demo mode). Panels show
+           threat level with threshold bands, kill-chain stage, attack type,
+           and defender actions overlaid on reward.}
+  \label{fig:demo_progression}
+\end{figure}

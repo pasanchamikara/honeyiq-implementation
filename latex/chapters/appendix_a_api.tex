@@ -1,0 +1,113 @@
+%% ============================================================
+%%  Appendix A — API Reference
+%% ============================================================
+\chapter{API Reference}
+\label{app:api}
+
+This appendix summarises the public interfaces of each module.
+Full docstrings are available in the source code.
+
+\section{\texttt{attacker.attack\_types}}
+
+\begin{lstlisting}[language=Python, caption={Attack type and kill chain enumerations.}]
+class AttackType(IntEnum):
+    NORMAL=0, RECONNAISSANCE=1, ANALYSIS=2, FUZZERS=3,
+    EXPLOITS=4, BACKDOORS=5, SHELLCODE=6, GENERIC=7,
+    DOS=8, WORMS=9
+
+    @classmethod def names() -> List[str]
+    @classmethod def count() -> int
+
+class KillChainStage(IntEnum):
+    RECONNAISSANCE=0, WEAPONIZATION=1, DELIVERY=2,
+    EXPLOITATION=3, INSTALLATION=4,
+    COMMAND_AND_CTRL=5, ACTIONS_ON_OBJ=6
+
+class AttackerIntent(IntEnum):
+    STEALTHY=0, AGGRESSIVE=1, TARGETED=2, OPPORTUNISTIC=3
+\end{lstlisting}
+
+\section{\texttt{attacker.attacker}}
+
+\begin{lstlisting}[language=Python, caption={AttackerAgent interface.}]
+class AttackerAgent:
+    def __init__(self, intent: AttackerIntent = OPPORTUNISTIC,
+                 seed: int = 42) -> None
+    def reset(self) -> None
+    def step(self) -> Tuple[AttackType, KillChainStage,
+                            np.ndarray]   # (type, stage, features)
+\end{lstlisting}
+
+\section{\texttt{defender.honeypot}}
+
+\begin{lstlisting}[language=Python, caption={Honeypot action and reward computation.}]
+class HoneypotAction(IntEnum):
+    ALLOW=0, LOG=1, TROLL=2, BLOCK=3, ALERT=4
+
+def compute_threat_level(
+    attack_type: AttackType,
+    kill_chain_stage: KillChainStage,
+    escalation_rate: float,
+    attack_count: int
+) -> float  # in [0, 1]
+
+def compute_reward(
+    action: HoneypotAction,
+    threat_level: float,
+    attack_type: AttackType,
+    kill_chain_stage: KillChainStage,
+    is_attack: bool
+) -> float
+\end{lstlisting}
+
+\section{\texttt{defender.dqn}}
+
+\begin{lstlisting}[language=Python, caption={DQN agent interface.}]
+class DQNAgent:
+    def __init__(self, state_dim: int = 24,
+                 action_dim: int = 5,
+                 lr: float = 1e-3,
+                 gamma: float = 0.99,
+                 epsilon: float = 1.0,
+                 epsilon_min: float = 0.05,
+                 epsilon_decay: float = 0.997,
+                 buffer_capacity: int = 15000,
+                 batch_size: int = 64,
+                 target_update_freq: int = 150) -> None
+
+    def select_action(self, state: np.ndarray) -> int
+    def update(self) -> Optional[float]   # returns loss or None
+    def save(self, path: str) -> None
+    def load(self, path: str) -> None
+\end{lstlisting}
+
+\section{\texttt{environment.CyberSecurityEnv}}
+
+\begin{lstlisting}[language=Python, caption={Gymnasium environment interface.}]
+class CyberSecurityEnv(gymnasium.Env):
+    observation_space: Box(shape=(24,), dtype=float32)
+    action_space:      Discrete(5)
+
+    def reset(self, seed=None, options=None
+             ) -> Tuple[np.ndarray, dict]
+    def step(self, action: int
+            ) -> Tuple[np.ndarray, float, bool, bool, dict]
+\end{lstlisting}
+
+\section{\texttt{evaluation.metrics}}
+
+\begin{lstlisting}[language=Python, caption={MetricsCollector interface.}]
+class MetricsCollector:
+    def __init__(self, log_dir: str = "logs/") -> None
+
+    def record_step(self, episode, step, action, reward,
+                    info, predicted_attack, loss) -> None
+    def end_episode(self, episode: int) -> EpisodeRecord
+    def summary_report(self) -> dict
+    def save_csv(self) -> None
+    def plot_training_curves(self) -> None
+    def plot_kill_chain_heatmap(self) -> None
+    def plot_attack_progression(
+            self, step_records: List[StepRecord]) -> None
+    def analyze(self) -> None
+\end{lstlisting}

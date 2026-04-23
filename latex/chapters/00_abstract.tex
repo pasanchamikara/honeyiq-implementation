@@ -1,0 +1,39 @@
+%% ============================================================
+%%  Abstract
+%% ============================================================
+\chapter*{Abstract}
+\addcontentsline{toc}{chapter}{Abstract}
+
+Modern networked systems face an ever-escalating threat landscape in which
+attackers progress through structured sequences of exploitation stages.
+Static rule-based defences cannot adapt to the dynamic, intent-driven nature
+of contemporary adversaries.
+This thesis presents \textbf{HoneyIQ}, a simulation framework in which a
+Deep Q-Network (DQN) agent learns to operate a honeypot against a
+Markov-chain-driven attacker modelled on the Lockheed~Martin Cyber Kill
+Chain~\citep{hutchins2011intelligence}.
+
+The attacker subsystem generates realistic network traffic by sampling
+parametric feature distributions derived from the UNSW-NB15 intrusion
+detection dataset~\citep{moustafa2015unsw}.
+Four attacker intent profiles --- \emph{Stealthy}, \emph{Aggressive},
+\emph{Targeted}, and \emph{Opportunistic} --- are encoded as intent-specific
+Markov transition modifiers, producing qualitatively distinct attack
+campaigns.
+
+The defender combines a Random Forest classifier~\citep{breiman2001random}
+for attack-type identification with a DQN~\citep{mnih2015humanlevel} that
+selects one of five honeypot responses (ALLOW, LOG, TROLL, BLOCK, ALERT)
+from a 24-dimensional state vector.
+A composite threat-level signal integrates attack severity, kill chain
+progress, escalation rate, and cumulative attack pressure.
+
+Experimental results demonstrate that a policy trained on the
+\emph{Opportunistic} intent achieves a mean detection rate above 0.8 while
+maintaining a false-positive rate below 0.3, and transfers with moderate
+degradation to the \emph{Stealthy} and \emph{Targeted} profiles.
+
+\vspace{1em}
+\noindent\textbf{Keywords:} deep reinforcement learning, Deep Q-Network,
+honeypot, cyber kill chain, intrusion detection, Markov chain, cybersecurity.
+\clearpage

@@ -1,0 +1,108 @@
+%% ============================================================
+%%  HoneyIQ — Thesis Master Document
+%%  Compile with: pdflatex main && bibtex main && pdflatex main
+%%                              && pdflatex main
+%% ============================================================
+\documentclass[12pt, a4paper, oneside]{report}
+
+%% ── Packages ─────────────────────────────────────────────────
+\usepackage[utf8]{inputenc}
+\usepackage[T1]{fontenc}
+\usepackage{lmodern}
+\usepackage[UKenglish]{babel}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{setspace}
+\usepackage{microtype}
+
+%% Graphics & colour
+\usepackage{graphicx}
+\usepackage[table,xcdraw]{xcolor}
+\usepackage{tikz}
+
+%% Mathematics
+\usepackage{amsmath, amssymb, amsthm}
+
+%% Tables
+\usepackage{booktabs}
+\usepackage{tabularx}
+\usepackage{longtable}
+\usepackage{multirow}
+
+%% Code listings
+\usepackage{listings}
+\lstset{
+  basicstyle=\ttfamily\small,
+  breaklines=true,
+  frame=single,
+  rulecolor=\color{gray!40},
+  backgroundcolor=\color{gray!5},
+  keywordstyle=\color{blue!70!black}\bfseries,
+  commentstyle=\color{green!50!black},
+  stringstyle=\color{red!60!black},
+  showstringspaces=false,
+  numbers=left,
+  numberstyle=\tiny\color{gray},
+  numbersep=6pt,
+}
+
+%% Hyperlinks
+\usepackage[hidelinks, colorlinks=false]{hyperref}
+\usepackage{url}
+
+%% Bibliography
+\usepackage[numbers,sort&compress]{natbib}
+
+%% Header / footer
+\usepackage{fancyhdr}
+\pagestyle{fancy}
+\fancyhf{}
+\fancyhead[L]{\nouppercase{\leftmark}}
+\fancyhead[R]{\thepage}
+\renewcommand{\headrulewidth}{0.4pt}
+
+%% Chapter title styling
+\usepackage{titlesec}
+\titleformat{\chapter}[display]
+  {\normalfont\huge\bfseries}
+  {\chaptertitlename\ \thechapter}{20pt}{\Huge}
+
+%% Theorem-like environments
+\newtheorem{definition}{Definition}[chapter]
+\newtheorem{theorem}{Theorem}[chapter]
+
+%% Line spacing
+\onehalfspacing
+
+%% ── Document ─────────────────────────────────────────────────
+\begin{document}
+
+%% ── Front matter ─────────────────────────────────────────────
+\input{chapters/00_titlepage}
+
+\pagenumbering{roman}
+\input{chapters/00_abstract}
+
+\tableofcontents
+\listoffigures
+\listoftables
+
+\cleardoublepage
+\pagenumbering{arabic}
+
+%% ── Main chapters ────────────────────────────────────────────
+\input{chapters/01_introduction}
+\input{chapters/02_background}
+\input{chapters/03_methodology}
+\input{chapters/04_results}
+\input{chapters/05_discussion}
+\input{chapters/06_conclusion}
+
+%% ── Back matter ──────────────────────────────────────────────
+\bibliographystyle{plainnat}
+\bibliography{bibliography}
+
+\appendix
+\input{chapters/appendix_a_api}
+\input{chapters/appendix_b_hyperparams}
+
+\end{document}

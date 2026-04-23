@@ -1,0 +1,207 @@
+%% ============================================================
+%%  Chapter 2 — Background
+%% ============================================================
+\chapter{Background and Related Work}
+\label{ch:background}
+
+\section{Reinforcement Learning}
+
+Reinforcement learning (RL) is a paradigm in which an \emph{agent} learns to
+make decisions by interacting with an \emph{environment} and receiving scalar
+\emph{rewards}~\citep{sutton2018reinforcement}.
+The goal is to find a policy $\pi(a \mid s)$ --- a mapping from states to
+actions --- that maximises the expected cumulative discounted return:
+%
+\begin{equation}
+  G_t = \sum_{k=0}^{\infty} \gamma^k \cdot r_{t+k+1},
+  \label{eq:return}
+\end{equation}
+%
+where $\gamma \in [0, 1)$ is the \emph{discount factor} controlling the
+relative weight of future rewards.
+
+\subsection{Markov Decision Process Formalisation}
+
+The cybersecurity environment in HoneyIQ is formalised as an MDP
+$\langle \mathcal{S}, \mathcal{A}, P, R, \gamma \rangle$:
+%
+\begin{itemize}
+  \item $\mathcal{S}$ --- continuous 24-dimensional observation space;
+  \item $\mathcal{A}$ --- five discrete honeypot actions;
+  \item $P(s' \mid s, a)$ --- transition dynamics determined by the
+        attacker's Markov chain (the defender's action does not influence
+        the attacker's next state);
+  \item $R(s, a, s')$ --- reward function encoding honeypot domain
+        knowledge;
+  \item $\gamma = 0.99$.
+\end{itemize}
+
+\subsection{Q-Learning}
+
+Q-learning estimates the \emph{action-value function} $Q(s, a)$ --- the
+expected return from taking action $a$ in state $s$ and then following the
+optimal policy:
+%
+\begin{equation}
+  Q^*(s, a) = r + \gamma \cdot \max_{a'} Q^*(s', a')
+  \quad \text{(Bellman optimality equation).}
+  \label{eq:bellman}
+\end{equation}
+%
+The greedy policy derived from $Q^*$ is $\pi^*(s) = \arg\max_a Q^*(s, a)$.
+
+\section{Deep Q-Networks (DQN)}
+
+Plain Q-learning requires a table indexed by every $(s, a)$ pair, which is
+infeasible for continuous or high-dimensional state spaces.
+DQN~\citep{mnih2015humanlevel} approximates $Q(s, a; \theta)$ with a neural
+network and introduces three stabilising mechanisms.
+
+\subsection{Neural Network Approximator}
+
+HoneyIQ uses a fully connected network:
+%
+\begin{equation}
+  \text{Input}(24)
+  \xrightarrow{\text{Linear}} \xrightarrow{\text{LayerNorm}} \xrightarrow{\text{ReLU}}
+  \cdots \times 3
+  \xrightarrow{\text{Linear}} \mathbb{R}^5.
+\end{equation}
+%
+Hidden layer widths are 256, 128, and 64 respectively.
+LayerNorm is preferred over BatchNorm because it stabilises training with
+small batch sizes and avoids cross-sample dependencies.
+Kaiming uniform initialisation preserves gradient variance under ReLU
+activations.
+
+\subsection{Experience Replay}
+
+Transitions $(s, a, r, s', \text{done})$ are stored in a circular replay
+buffer of capacity 15\,000.
+Mini-batches of 64 are sampled uniformly for each gradient update,
+breaking temporal correlations and allowing each transition to be reused
+multiple times.
+
+\subsection{Target Network}
+
+A second \emph{target network} with parameters $\theta^-$ provides stable
+TD targets:
+%
+\begin{equation}
+  y_i = r_i + \gamma \cdot \max_{a'} Q(s'_i, a'; \theta^-).
+  \label{eq:td_target}
+\end{equation}
+%
+$\theta^-$ is hard-copied from the policy network every 150 steps,
+preventing the moving-target oscillations that arise when the same network
+provides both predictions and targets.
+
+\subsection{Huber Loss and Gradient Clipping}
+
+The TD error is minimised with SmoothL1 (Huber) loss:
+%
+\begin{equation}
+  \mathcal{L}(\delta) =
+  \begin{cases}
+    \tfrac{1}{2}\delta^2 & |\delta| \le 1 \\
+    |\delta| - \tfrac{1}{2} & \text{otherwise,}
+  \end{cases}
+\end{equation}
+%
+which is less sensitive to outlier Q-value errors than MSE while remaining
+differentiable everywhere.
+Gradients are clipped to a maximum $\ell_2$ norm of 10.0 to prevent
+divergence.
+
+\subsection{Epsilon-Greedy Exploration}
+
+During training, the agent selects a random action with probability
+$\varepsilon$ (exploration) and the greedy action otherwise.
+$\varepsilon$ is annealed exponentially from 1.0 to 0.05:
+%
+\begin{equation}
+  \varepsilon \leftarrow \max(\varepsilon_{\min},\; \varepsilon \cdot \varepsilon_{\text{decay}}),
+  \quad \varepsilon_{\text{decay}} = 0.997.
+\end{equation}
+
+\section{Markov Chains}
+
+An attacker's behaviour is modelled as a Discrete-Time Markov
+Chain~\citep{norris1998markov} (DTMC):
+%
+\begin{equation}
+  P(X_{t+1} = j \mid X_t = i,\, X_{t-1}, \ldots) = P(X_{t+1} = j \mid X_t = i).
+\end{equation}
+%
+Two independent chains operate in parallel: a $10 \times 10$ attack-type
+transition matrix and a $7 \times 7$ kill-chain-stage transition matrix.
+Intent-specific modifier matrices are applied element-wise before
+row-renormalisation, skewing the probability mass towards intent-appropriate
+transitions without altering the matrix dimensions.
+
+\section{Lockheed Martin Cyber Kill Chain}
+
+The Cyber Kill Chain~\citep{hutchins2011intelligence} models adversary
+campaigns as a sequence of seven phases (Table~\ref{tab:killchain}).
+HoneyIQ assigns each attack type a \emph{primary stage} and uses stage
+weights that increase linearly from 0.10 (Reconnaissance) to 1.00 (Actions
+on Objectives), reflecting that later-stage activity is more dangerous.
+
+\begin{table}[ht]
+  \centering
+  \caption{Cyber Kill Chain stages and associated primary attack types.}
+  \label{tab:killchain}
+  \begin{tabular}{clll}
+    \toprule
+    Index & Stage & Weight & Primary Attack Types \\
+    \midrule
+    0 & Reconnaissance & 0.10 & NORMAL, RECONNAISSANCE \\
+    1 & Weaponization  & 0.20 & ANALYSIS \\
+    2 & Delivery       & 0.35 & FUZZERS, GENERIC \\
+    3 & Exploitation   & 0.55 & EXPLOITS, SHELLCODE \\
+    4 & Installation   & 0.70 & BACKDOORS \\
+    5 & Command \& Control & 0.85 & WORMS \\
+    6 & Actions on Objectives & 1.00 & DOS \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Honeypot Technology}
+
+A honeypot is a decoy system designed to attract, observe, and study
+attackers~\citep{spitzner2003honeypot}.
+Any connection to a properly deployed honeypot is inherently suspicious
+because legitimate users have no reason to interact with it.
+HoneyIQ abstracts honeypot responses into five actions:
+ALLOW, LOG, TROLL (tarpit), BLOCK, and ALERT.
+
+\section{UNSW-NB15 Dataset}
+
+The UNSW-NB15 benchmark~\citep{moustafa2015unsw} contains network flow
+records across nine attack categories and normal traffic, with 49 features
+derived from raw packet captures.
+HoneyIQ uses 15 of these features, sampling them from parametric
+distributions that reproduce per-attack signatures (e.g.\ high
+\texttt{ct\_dst\_ltm} for Reconnaissance, extreme \texttt{sload} for DoS).
+
+\section{Random Forests}
+
+A Random Forest~\citep{breiman2001random} is an ensemble of decision trees,
+each trained on a bootstrap sample with random feature subsets at each split.
+The attack classifier in HoneyIQ uses
+\texttt{class\_weight=\textquotedbl{}balanced\textquotedbl{}} to handle
+class imbalance and \texttt{StandardScaler} normalisation on the 15-feature
+input vector.
+Training data is generated entirely from the parametric feature
+distributions, avoiding dependence on a real labelled dataset.
+
+\section{Related Work}
+
+Several studies have applied RL to cybersecurity scenarios.
+\citet{li2019mad} used multi-agent RL for network defence, demonstrating that
+learned policies outperform static rules under adaptive adversaries.
+Prior work on DQN-based intrusion response typically treats the attack stream
+as a stationary distribution; HoneyIQ extends this by modelling attacker
+intent as a latent variable that governs the Markov transition structure,
+enabling evaluation of policy robustness across qualitatively distinct
+campaigns.

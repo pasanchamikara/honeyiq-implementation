@@ -1,0 +1,64 @@
+%% ============================================================
+%%  Appendix B — Full Hyperparameter Listing
+%% ============================================================
+\chapter{Full Hyperparameter Listing}
+\label{app:hyperparams}
+
+Table~\ref{tab:full_hyperparams} lists every configurable parameter in
+HoneyIQ with its default value and the file in which it is defined.
+
+\begin{longtable}{p{4.2cm}p{2.8cm}p{5.5cm}}
+  \caption{Complete HoneyIQ hyperparameter listing.}
+  \label{tab:full_hyperparams} \\
+  \toprule
+  Parameter & Default & Source / Notes \\
+  \midrule
+  \endfirsthead
+  \multicolumn{3}{c}{\tablename\ \thetable{} (continued)} \\
+  \toprule
+  Parameter & Default & Source / Notes \\
+  \midrule
+  \endhead
+  \midrule
+  \multicolumn{3}{r}{\footnotesize Continued on next page} \\
+  \endfoot
+  \bottomrule
+  \endlastfoot
+
+  %% DQN
+  \multicolumn{3}{l}{\textit{DQN (defender/dqn.py)}} \\[2pt]
+  state\_dim         & 24          & Observation vector length \\
+  action\_dim        & 5           & HoneypotAction count \\
+  hidden\_layers     & [256,128,64] & FC network widths \\
+  learning\_rate     & $10^{-3}$   & Adam optimiser \\
+  gamma              & 0.99        & Discount factor \\
+  epsilon\_initial   & 1.0         & Start of exploration \\
+  epsilon\_min       & 0.05        & Floor for exploration \\
+  epsilon\_decay     & 0.997       & Per-step multiplicative decay \\
+  buffer\_capacity   & 15\,000     & Circular replay buffer size \\
+  batch\_size        & 64          & Mini-batch for gradient update \\
+  target\_update\_freq & 150 steps  & Hard copy of policy $\to$ target \\
+  grad\_clip\_norm   & 10.0        & Max $\ell_2$ norm for gradients \\
+  loss\_function     & SmoothL1    & Huber loss \\
+  weight\_init       & Kaiming uniform & He init for ReLU layers \\
+  normalisation      & LayerNorm   & Per-sample, per-feature \\[6pt]
+
+  %% Classifier
+  \multicolumn{3}{l}{\textit{Random Forest (defender/classifier.py)}} \\[2pt]
+  n\_estimators      & 100         & Number of trees \\
+  class\_weight      & balanced    & Handles class imbalance \\
+  scaler             & StandardScaler & Zero-mean, unit-variance \\
+  train\_samples\_per\_class & 600 & Synthetic training set size \\
+  eval\_seed         & 999         & Held-out evaluation seed \\[6pt]
+
+  %% Environment
+  \multicolumn{3}{l}{\textit{Environment (environment/env.py)}} \\[2pt]
+  max\_steps         & 500         & Episode truncation length \\
+  escalation\_window & 20 steps    & Sliding window for esc.\ rate \\
+  threat\_weights    & (0.45, 0.35, 0.15, 0.05) & See Eq.~(3.6) \\[6pt]
+
+  %% Attacker
+  \multicolumn{3}{l}{\textit{Attacker (attacker/attacker.py)}} \\[2pt]
+  default\_intent    & OPPORTUNISTIC & Can be overridden via CLI \\
+  seed               & 42          & Numpy random seed \\
+\end{longtable}

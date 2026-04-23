@@ -1,0 +1,289 @@
+%% ============================================================
+%%  Chapter 3 — Methodology
+%% ============================================================
+\chapter{Methodology}
+\label{ch:methodology}
+
+\section{System Overview}
+
+HoneyIQ is a closed-loop simulation in which an \emph{Attacker} and a
+\emph{Defender} interact through a Gymnasium environment
+(\texttt{CyberSecurityEnv}).
+Figure~\ref{fig:architecture} shows the component layout.
+
+\begin{figure}[ht]
+  \centering
+  % Replace with \includegraphics when a diagram is available
+  \framebox[0.85\textwidth]{%
+    \parbox{0.82\textwidth}{\centering\vspace{2cm}
+    [Architecture diagram placeholder — see docs/architecture.md]
+    \vspace{2cm}}%
+  }
+  \caption{High-level architecture of HoneyIQ.}
+  \label{fig:architecture}
+\end{figure}
+
+At each time step the attacker generates an attack type, kill-chain stage,
+and feature vector; the environment computes a threat level and state vector;
+the defender selects a honeypot action; and a reward is returned to the
+defender's replay buffer.
+
+\section{Attacker Module}
+
+\subsection{Attack Type and Kill Chain Enumerations}
+
+Two \texttt{IntEnum} classes define the discrete state spaces:
+
+\begin{itemize}
+  \item \texttt{AttackType} --- ten categories (NORMAL through WORMS) with
+        associated severity weights in $[0, 0.90]$.
+  \item \texttt{KillChainStage} --- seven stages mapped to the Lockheed
+        Martin Kill Chain.
+\end{itemize}
+
+Table~\ref{tab:attack_severity} lists each attack type, its severity weight,
+and its typical kill-chain stage.
+
+\begin{table}[ht]
+  \centering
+  \caption{Attack types, severity weights, and primary kill-chain stages.}
+  \label{tab:attack_severity}
+  \begin{tabular}{clcc}
+    \toprule
+    Index & Attack Type & Severity & Primary Stage \\
+    \midrule
+    0 & NORMAL        & 0.00 & Reconnaissance \\
+    1 & RECONNAISSANCE & 0.20 & Reconnaissance \\
+    2 & ANALYSIS      & 0.25 & Weaponization \\
+    3 & FUZZERS       & 0.35 & Delivery \\
+    4 & GENERIC       & 0.40 & Delivery \\
+    5 & EXPLOITS      & 0.70 & Exploitation \\
+    6 & SHELLCODE     & 0.75 & Exploitation \\
+    7 & BACKDOORS     & 0.80 & Installation \\
+    8 & DOS           & 0.85 & Actions on Objectives \\
+    9 & WORMS         & 0.90 & Command \& Control \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Markov Transition Model}
+
+The attacker maintains two Discrete-Time Markov Chains.
+The $10 \times 10$ attack-type matrix $\mathbf{T}_A$ and the $7 \times 7$
+kill-chain-stage matrix $\mathbf{T}_K$ are both row-stochastic.
+At each step the attacker samples:
+%
+\begin{align}
+  a_{t+1} &\sim \text{Categorical}\bigl(\mathbf{T}_A[a_t, \cdot]\bigr), \\
+  k_{t+1} &\sim \text{Categorical}\bigl(\mathbf{T}_K[k_t, \cdot]\bigr).
+\end{align}
+%
+A kill-chain constraint prevents unrealistic regression by flooring the
+sampled next stage:
+%
+\begin{equation}
+  k_{t+1} \leftarrow \max\bigl(\tilde{k}_{t+1},\;
+                                 \text{primary\_stage}(a_{t+1}) - 1\bigr).
+\end{equation}
+
+\subsubsection{Intent Profiles}
+
+Four intent modifiers skew the base matrices (Table~\ref{tab:intents}).
+
+\begin{table}[ht]
+  \centering
+  \caption{Attacker intent profiles and their behavioural characteristics.}
+  \label{tab:intents}
+  \begin{tabular}{lll}
+    \toprule
+    Intent & Attack preference & Kill chain speed \\
+    \midrule
+    STEALTHY      & Recon, Analysis, Backdoors & Slow; high self-loop probability \\
+    AGGRESSIVE    & DoS, Worms, Exploits       & Fast; low self-loops, forward bias \\
+    TARGETED      & Exploits $\to$ Shellcode $\to$ Backdoors & Direct path through exploitation \\
+    OPPORTUNISTIC & Generic, Fuzzers (scattered) & Moderate forward bias \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Network Feature Simulation}
+
+At each step the attacker samples 15 network features from parametric
+distributions conditioned on the current attack type.
+Selected signatures are:
+%
+\begin{itemize}
+  \item \textbf{Reconnaissance}: very short \texttt{dur}, high
+        \texttt{ct\_dst\_ltm} (port-scanning pattern).
+  \item \textbf{DoS}: extreme \texttt{sload} (50k--500k bps), near-zero
+        \texttt{dur}, Poisson-distributed \texttt{spkts} ($\lambda=500$).
+  \item \textbf{Backdoors}: long \texttt{dur} (10--3600\,s), low
+        \texttt{sload} (stealthy), balanced window sizes.
+  \item \textbf{Worms}: high \texttt{ct\_dst\_ltm} ($\lambda=40$), high
+        packet counts (spreading behaviour).
+\end{itemize}
+
+\section{Defender Module}
+
+\subsection{Attack Classifier}
+
+A Random Forest classifier is trained on 600 synthetic samples per class
+(6\,000 total) generated from the feature distributions described above.
+Features are standardised with \texttt{StandardScaler}.
+The classifier provides a predicted attack type at each step for logging and
+introspection; in the current implementation the DQN state uses ground-truth
+labels, but the classifier output would replace these in a real deployment.
+
+Classifier performance is evaluated on a held-out set (seed = 999) generated
+independently of the training split, reporting per-class precision, recall,
+F1-score, and overall accuracy.
+
+\subsection{DQN Agent}
+
+The DQN agent (\texttt{DQNAgent}) wraps the policy network, target network,
+replay buffer, and training loop.
+Table~\ref{tab:hyperparams} summarises the key hyperparameters.
+
+\begin{table}[ht]
+  \centering
+  \caption{DQN hyperparameters.}
+  \label{tab:hyperparams}
+  \begin{tabular}{ll}
+    \toprule
+    Parameter & Value \\
+    \midrule
+    State dimension & 24 \\
+    Action space & 5 (HoneypotAction) \\
+    Hidden layers & [256, 128, 64] \\
+    Normalisation & LayerNorm \\
+    Activation & ReLU \\
+    Replay buffer capacity & 15\,000 \\
+    Mini-batch size & 64 \\
+    Discount factor $\gamma$ & 0.99 \\
+    Learning rate & $10^{-3}$ \\
+    Target network update interval & 150 steps \\
+    $\varepsilon$ initial / final & 1.0 / 0.05 \\
+    $\varepsilon$ decay & 0.997 \\
+    Gradient clip norm & 10.0 \\
+    Loss function & Huber (SmoothL1) \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\subsection{Honeypot Action Space and Reward Function}
+
+The reward function $R(s, a)$ encodes domain knowledge as a base matrix
+indexed by action and threat band, with three layers of modifiers:
+
+\begin{enumerate}
+  \item \textbf{Base matrix} (Table~\ref{tab:reward_matrix}) --- values
+        range from $-6$ (ALLOW on critical traffic) to $+6$ (ALERT on
+        critical traffic).
+  \item \textbf{Late kill-chain penalty} --- negative rewards are multiplied
+        by $1.5\times$ for stages $\geq$ INSTALLATION.
+  \item \textbf{Attack-type bonuses} --- TROLL on BACKDOORS/SHELLCODE/WORMS
+        ($+0.8$); BLOCK on WORMS ($+1.0$); LOG on RECONNAISSANCE ($+0.5$).
+\end{enumerate}
+
+\begin{table}[ht]
+  \centering
+  \caption{Base reward matrix (action $\times$ threat band).}
+  \label{tab:reward_matrix}
+  \begin{tabular}{lccccc}
+    \toprule
+    Action & Benign & Low & Medium & High & Critical \\
+    \midrule
+    ALLOW & $+1.0$ & $-1.0$ & $-2.0$ & $-4.0$ & $-6.0$ \\
+    LOG   & $-0.5$ & $+1.5$ & $+2.0$ & $+0.5$ & $-1.0$ \\
+    TROLL & $-1.0$ & $+0.5$ & $+1.0$ & $+3.0$ & $+2.0$ \\
+    BLOCK & $-2.0$ & $-0.5$ & $+0.5$ & $+4.0$ & $+5.0$ \\
+    ALERT & $-3.0$ & $-1.0$ & $-0.5$ & $+2.0$ & $+6.0$ \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Environment: \texttt{CyberSecurityEnv}}
+
+\texttt{CyberSecurityEnv} extends \texttt{gymnasium.Env} and bridges the
+attacker and defender.
+It exposes:
+
+\begin{itemize}
+  \item \textbf{Observation space}: \texttt{Box}(24,) with features
+        described in Section~\ref{sec:state_encoding}.
+  \item \textbf{Action space}: \texttt{Discrete}(5).
+  \item \textbf{Episode lifecycle}: \texttt{reset()} re-initialises the
+        attacker and clears escalation history; each \texttt{step()} call
+        advances the attacker, constructs the state vector, computes the
+        threat level and reward, and increments the step counter.
+        Episodes truncate at a configurable \texttt{max\_steps}.
+\end{itemize}
+
+\subsection{State Vector Encoding}
+\label{sec:state_encoding}
+
+The 24-dimensional observation vector uses one-hot encoding for categorical
+variables and normalised scalars for continuous ones:
+
+\begin{equation}
+  s = \underbrace{[\,\text{attack\_type}_{1:10}\,]}_{\text{one-hot}}
+      \;\oplus\;
+      \underbrace{[\,\text{stage}_{1:7}\,]}_{\text{one-hot}}
+      \;\oplus\;
+      \underbrace{[\,\text{threat},\;\tfrac{\text{count}}{100},\;\text{esc\_rate}\,]}_{\text{scaled scalars}}
+      \;\oplus\;
+      \underbrace{[\,\text{intent}_{1:4}\,]}_{\text{one-hot}}.
+\end{equation}
+
+\subsection{Composite Threat Level}
+\label{sec:threat_level}
+
+The threat level $T \in [0, 1]$ combines four signals:
+
+\begin{equation}
+  T = 0.45 \cdot s_{\text{attack}}
+    + 0.35 \cdot w_{\text{stage}}
+    + 0.15 \cdot r_{\text{esc}}
+    + 0.05 \cdot \min\!\left(1,\, \frac{n_{\text{attack}}}{100}\right),
+\end{equation}
+
+where $s_{\text{attack}}$ is the per-type severity, $w_{\text{stage}}$ is
+the kill-chain stage weight, $r_{\text{esc}}$ is the fraction of attacks in
+the last 20 steps, and $n_{\text{attack}}$ is the cumulative attack count.
+Threat bands partition $[0,1]$ into five tiers: Benign ($<0.15$), Low
+(0.15--0.35), Medium (0.35--0.55), High (0.55--0.75), and Critical
+($\geq 0.75$).
+
+\section{Evaluation Infrastructure}
+
+\subsection{Metrics}
+
+Two granularity levels are maintained:
+
+\begin{itemize}
+  \item \textbf{\texttt{StepRecord}} --- per-step tuple:
+        \texttt{(episode, step, action, reward, attack\_type,
+        kill\_chain\_stage, threat\_level, is\_attack,
+        predicted\_attack, loss, escalation\_rate)}.
+  \item \textbf{\texttt{EpisodeRecord}} --- per-episode aggregates:
+        total reward, detection rate, false-positive rate, average threat
+        level, average DQN loss, action distribution, kill-chain
+        distribution.
+\end{itemize}
+
+The detection confusion matrix is defined relative to the ALLOW action:
+any action other than ALLOW on an attack step counts as a true positive.
+
+\begin{align}
+  \text{detection\_rate}      &= \frac{\text{TP}}{\text{TP} + \text{FN}}, \\
+  \text{false\_positive\_rate} &= \frac{\text{FP}}{\text{FP} + \text{TN}}.
+\end{align}
+
+\subsection{Experimental Protocol}
+
+All experiments use the same random seed for reproducibility.
+Training runs for a configurable number of episodes (default: 500) using
+the \emph{Opportunistic} intent profile.
+Cross-intent evaluation freezes the trained policy and re-evaluates it
+against each of the four intent profiles for 50 episodes each, recording
+mean detection rate and false-positive rate.

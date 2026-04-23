@@ -1,0 +1,82 @@
+%% ============================================================
+%%  Chapter 1 — Introduction
+%% ============================================================
+\chapter{Introduction}
+\label{ch:introduction}
+
+\section{Motivation}
+
+Cyber attacks have grown in sophistication and frequency, placing critical
+infrastructure, financial systems, and personal data at persistent risk.
+Traditional intrusion-detection systems (IDS) rely on static rule bases or
+fixed-threshold anomaly detectors that struggle to adapt as attacker
+strategies evolve.
+Honeypots --- decoy systems that attract and study attackers --- offer a
+complementary defence layer, but their effectiveness depends on when and how
+a defender engages with each suspicious connection.
+
+Reinforcement learning (RL) provides a natural framework for this decision
+problem: an agent repeatedly chooses how to respond to incoming traffic and
+receives a reward signal that encodes domain knowledge about correct
+behaviour.
+When combined with deep neural networks, RL agents can learn non-linear
+policies from high-dimensional observations without hand-crafted feature
+engineering.
+
+\section{Problem Statement}
+
+Two core challenges motivate this work.
+First, realistic attacker simulation is difficult: a synthetic attacker must
+produce plausible network traffic, follow a coherent escalation logic, and
+support multiple distinct intent profiles.
+Second, a learned honeypot policy must balance \emph{sensitivity}
+(detecting real attacks) against \emph{specificity} (avoiding false alarms
+that disrupt legitimate traffic), across a wide range of attack types and
+kill-chain stages.
+
+\section{Research Objectives}
+
+This thesis addresses the following objectives:
+
+\begin{enumerate}
+  \item Design a Markov-chain attacker model grounded in the Lockheed Martin
+        Cyber Kill Chain, with per-intent transition modifiers and
+        UNSW-NB15-inspired feature distributions.
+  \item Implement a DQN-based defender that learns an adaptive honeypot
+        response policy from a 24-dimensional state vector.
+  \item Develop a composite threat-level metric that integrates multiple
+        attack signals and drives a domain-informed reward function.
+  \item Evaluate the trained policy using detection rate, false-positive
+        rate, episode reward, and DQN training loss across all four attacker
+        intents.
+\end{enumerate}
+
+\section{Contributions}
+
+The principal contributions of this work are:
+
+\begin{itemize}
+  \item A fully self-contained attacker--defender simulation environment
+        built on the Gymnasium RL interface, enabling reproducible
+        experiments without access to live network data.
+  \item An intent-aware Markov attacker that generates qualitatively
+        different attack campaigns from a shared base transition structure.
+  \item A reward function that encodes honeypot domain knowledge ---
+        including tarpitting bonuses, late kill-chain penalties, and
+        attack-type-specific incentives --- as a learnable signal for DQN.
+  \item Empirical evidence that a policy trained on \emph{Opportunistic}
+        traffic generalises to harder intent profiles.
+\end{itemize}
+
+\section{Thesis Outline}
+
+Chapter~\ref{ch:background} surveys the theoretical foundations: reinforcement
+learning, Deep Q-Networks, Markov chains, the Cyber Kill Chain, honeypot
+technology, and the UNSW-NB15 dataset.
+Chapter~\ref{ch:methodology} describes the system design --- the attacker
+module, defender module, Gymnasium environment, and evaluation infrastructure.
+Chapter~\ref{ch:results} presents quantitative results from training and
+cross-intent evaluation experiments.
+Chapter~\ref{ch:discussion} interprets the findings, discusses limitations,
+and identifies directions for future research.
+Chapter~\ref{ch:conclusion} summarises the thesis.

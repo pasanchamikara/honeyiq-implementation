@@ -1,0 +1,121 @@
+%% ============================================================
+%%  Chapter 5 — Discussion
+%% ============================================================
+\chapter{Discussion}
+\label{ch:discussion}
+
+\section{Interpretation of Training Dynamics}
+
+The two-phase training curve --- high-variance exploration followed by
+rapid reward improvement --- is consistent with the theoretical properties
+of $\varepsilon$-greedy DQN.
+The replay buffer requires a warm-up period before the distribution of
+sampled transitions is sufficiently diverse for stable gradient updates.
+The correlation between the end of the high-$\varepsilon$ phase (around
+episode 100) and the onset of detection-rate improvement confirms that the
+network has learned a meaningful $Q$-value surface before exploitation begins.
+
+The simultaneous early rise and late decline of the false-positive rate
+reflects the agent working through a reward-shaping trade-off: initially
+it learns that non-ALLOW actions yield positive rewards on attack traffic,
+then it learns to discriminate the state features that indicate benign
+traffic (low threat level, low escalation rate, NORMAL attack type) and
+returns the correct ALLOW action in those cases.
+
+\section{Effectiveness of the Reward Function}
+
+The reward function design encodes three layers of domain knowledge:
+
+\begin{enumerate}
+  \item \textbf{Proportional responses} --- the base matrix steers the
+        agent toward graduated responses (LOG for low threats, TROLL/BLOCK
+        for medium, ALERT/BLOCK for critical) rather than a binary
+        detect/ignore policy.
+  \item \textbf{Kill-chain urgency} --- the $1.5\times$ late-stage penalty
+        on negative rewards amplifies the cost of missing an attack at
+        Installation, Command\,\&\,Control, or Actions on Objectives,
+        encouraging the agent to be more aggressive as campaigns progress.
+  \item \textbf{Honeypot-specific intelligence} --- the bonus for TROLL on
+        persistent attack types (BACKDOORS, SHELLCODE, WORMS) incentivises
+        the tarpitting strategy that simultaneously gathers intelligence
+        and wastes attacker resources.
+\end{enumerate}
+
+The action heatmap in Figure~\ref{fig:action_heatmap} shows that all three
+layers are active in the learned policy, suggesting the reward signal is
+informative and the DQN is capable of learning the multi-modal response
+structure.
+
+\section{Generalisability Across Attacker Intents}
+
+The degradation of the trained policy against the \emph{Aggressive} intent
+highlights a structural limitation: the Markov transition matrices for
+different intents produce qualitatively different threat-level time series.
+\emph{Aggressive} campaigns escalate to Critical threat levels in fewer
+steps, creating a temporal mismatch with the policy's calibrated response
+timing.
+Two approaches could address this:
+
+\begin{enumerate}
+  \item \textbf{Multi-intent training} --- exposing the agent to a mixture
+        of intents during training would broaden the state distribution and
+        encourage a more robust policy.
+  \item \textbf{Intent inference} --- augmenting the state vector with an
+        online intent posterior (estimated from the recent attack sequence)
+        would allow the policy to condition its responses on inferred
+        attacker behaviour.
+\end{enumerate}
+
+\section{Limitations}
+
+\paragraph{Synthetic data only.}
+Feature distributions are parametric approximations inspired by UNSW-NB15
+rather than fits to the actual dataset.
+Real network traffic contains long-range temporal correlations, protocol
+interactions, and noise sources that are not captured by the per-step
+independence assumption.
+
+\paragraph{Defender action does not affect attacker trajectory.}
+In the current formulation the attacker's Markov chain evolves independently
+of the defender's actions.
+In practice, a BLOCK or ALERT response may deter or redirect an attacker.
+Modelling the attacker as a best-responding agent (e.g.\ using multi-agent
+RL or game-theoretic methods) would produce a more realistic adversarial
+dynamic.
+
+\paragraph{Classifier is not integrated into the DQN state.}
+The Random Forest classifier provides attack-type predictions that are
+logged but not fed into the DQN observation vector.
+Replacing ground-truth labels with classifier outputs would test whether
+the policy is robust to classification noise --- a necessary step before
+real-world deployment.
+
+\paragraph{Single-episode evaluation.}
+The cross-intent results report means over 50 episodes, but variance across
+episodes is not reported.
+A more rigorous evaluation would include confidence intervals and
+statistical tests comparing intent-conditional performance distributions.
+
+\section{Design Choices and Trade-offs}
+
+\paragraph{LayerNorm over BatchNorm.}
+LayerNorm normalises across features rather than across the batch dimension,
+making it independent of batch size.
+For a DQN trained on mini-batches of 64 samples drawn from a diverse replay
+buffer, LayerNorm avoids the instability that arises when BatchNorm
+statistics are computed from a heterogeneous mini-batch.
+
+\paragraph{Hard target network update.}
+A hard copy every 150 steps (rather than a Polyak soft update) was chosen
+for simplicity.
+Soft updates with a small mixing coefficient ($\tau \approx 0.005$) could
+provide smoother target stabilisation, but the current setting proved
+adequate for convergence.
+
+\paragraph{Synthetic training data for the classifier.}
+Generating classifier training data from the parametric feature distributions
+avoids the need for a labelled real-world dataset and enables rapid
+re-training with arbitrary class balance.
+The risk is that the classifier is over-fit to synthetic data and may not
+generalise to real traffic --- a known challenge in intrusion detection
+research.

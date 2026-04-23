@@ -1,0 +1,82 @@
+%% ============================================================
+%%  Chapter 6 — Conclusion
+%% ============================================================
+\chapter{Conclusion}
+\label{ch:conclusion}
+
+\section{Summary}
+
+This thesis presented HoneyIQ, a simulation framework for training an
+adaptive honeypot defender using Deep Q-Networks against a structured,
+intent-driven attacker modelled on the Lockheed Martin Cyber Kill Chain.
+
+The key contributions are:
+
+\begin{itemize}
+  \item A Markov-chain attacker that produces realistic network traffic
+        via UNSW-NB15-inspired feature distributions, with four intent
+        profiles encoding qualitatively distinct escalation strategies.
+  \item A DQN agent that learns a five-action honeypot policy from a
+        24-dimensional state vector encoding attack type, kill-chain stage,
+        threat level, escalation rate, and attacker intent.
+  \item A domain-informed reward function incorporating proportional
+        responses, late kill-chain urgency amplification, and
+        honeypot-specific intelligence bonuses for tarpitting.
+  \item A composite threat-level metric that integrates attack severity,
+        kill-chain progress, escalation rate, and cumulative attack count
+        into a single normalised signal.
+  \item Empirical evidence that the trained policy achieves a detection
+        rate above 0.8 and a false-positive rate below 0.3 on the training
+        intent, with moderate transfer to harder intent profiles.
+\end{itemize}
+
+\section{Future Work}
+
+Several directions would extend and strengthen this work:
+
+\begin{enumerate}
+  \item \textbf{Multi-intent training.}
+        Exposing the DQN to a mixture of intent profiles during training
+        would improve cross-intent robustness without requiring intent
+        inference.
+
+  \item \textbf{Adaptive attacker.}
+        Modelling the attacker as a best-responding agent using
+        multi-agent RL or game-theoretic formulations would introduce
+        true adversarial dynamics.
+
+  \item \textbf{Real-world feature integration.}
+        Fitting feature distributions to the actual UNSW-NB15 records,
+        or using a generative model (e.g.\ a conditional VAE) trained on
+        real packet data, would reduce the simulation-to-reality gap.
+
+  \item \textbf{Classifier-in-the-loop.}
+        Replacing ground-truth attack labels in the DQN state with Random
+        Forest classifier outputs would test policy robustness under
+        observation noise, a prerequisite for real deployment.
+
+  \item \textbf{Uncertainty-aware policy.}
+        Replacing the standard DQN with a distributional RL variant
+        (e.g.\ C51 or QR-DQN) would allow the agent to reason about
+        aleatoric uncertainty in threat levels, potentially improving
+        decisions at threat-band boundaries.
+
+  \item \textbf{Evaluation on real honeypot logs.}
+        Replaying captured honeypot sessions through the trained policy
+        would provide an out-of-distribution test of generalisation to
+        genuine attack traffic.
+\end{enumerate}
+
+\section{Closing Remarks}
+
+HoneyIQ demonstrates that reinforcement learning is a viable framework for
+adaptive honeypot management.
+The combination of a structured attacker model, a domain-informed reward
+function, and a stable DQN implementation produces a policy that behaves
+in alignment with honeypot best practices: engaging low-severity traffic
+passively, tarpitting persistent attackers for intelligence, and escalating
+to BLOCK or ALERT as campaigns reach critical kill-chain stages.
+The simulation infrastructure is fully self-contained, enabling rapid
+iteration on both the attacker model and the defender's learning algorithm,
+and provides a foundation for more sophisticated adversarial training
+scenarios in future research.
