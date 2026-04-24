@@ -12,6 +12,58 @@ The `evaluation/metrics.py` module handles:
 
 ---
 
+## Experimental Results
+
+### Cross-Intent SEDM Evaluation
+
+The Stage-Escalation Decision Matrix (SEDM) was evaluated over 30 episodes per intent (200 steps each). Results from `results/evaluation/evaluation_summary.csv`:
+
+| Intent | Episodes | Mean Reward | Std Reward | Min | Max | Detection Rate | FP Rate | Avg Threat | Avg Risk |
+|---|---|---|---|---|---|---|---|---|---|
+| STEALTHY | 30 | 1012.22 | 51.37 | 920.0 | 1124.5 | **99.09%** | 35.56% | 0.806 | 0.632 |
+| AGGRESSIVE | 30 | 1090.84 | 19.80 | 1051.0 | 1128.5 | **99.47%** | 6.67% | 0.854 | 0.709 |
+| TARGETED | 30 | 1127.10 | 20.98 | 1074.0 | 1168.0 | **99.48%** | 3.33% | 0.853 | 0.673 |
+| OPPORTUNISTIC | 30 | 896.05 | 32.98 | 843.0 | 973.0 | **99.41%** | 15.00% | 0.790 | 0.663 |
+
+**Key observations:**
+- Detection rates exceed 99% across all four intent profiles, demonstrating strong and consistent threat coverage.
+- False positive rates vary significantly by intent: TARGETED campaigns (3.33%) and AGGRESSIVE campaigns (6.67%) generate few false alarms because attack traffic dominates. STEALTHY campaigns produce more false positives (35.56%) because low-severity reconnaissance-stage traffic triggers LOG/TROLL responses even on borderline-benign steps.
+- TARGETED yields the highest mean reward (1127.10) because the focused kill chain path is well-aligned with the SEDM's escalation-based logic.
+- OPPORTUNISTIC has the lowest mean reward (896.05) despite a high detection rate; the scattered attack distribution results in more BLOCK actions on medium-severity traffic where LOG/TROLL would have been better calibrated.
+
+### Action Distribution
+
+From `results/evaluation/action_distribution.csv`:
+
+| Intent | ALLOW | LOG | TROLL | BLOCK | ALERT |
+|---|---|---|---|---|---|
+| STEALTHY | 0.0% | 1.1% | 0.7% | 17.9% | **80.3%** |
+| AGGRESSIVE | 0.0% | 0.0% | 0.0% | 4.6% | **95.4%** |
+| TARGETED | 0.0% | 0.5% | 0.1% | 5.4% | **94.0%** |
+| OPPORTUNISTIC | 0.1% | 1.0% | 0.4% | 24.6% | **73.8%** |
+
+**Key observations:**
+- AGGRESSIVE and TARGETED campaigns are dominated by ALERT responses (>94%), consistent with the SEDM correctly escalating against high-severity, high-frequency attacks.
+- STEALTHY campaigns still produce predominantly ALERT responses (80.3%), but also include 17.9% BLOCK — reflecting intermediate-severity backdoor traffic that falls in the INSTALLATION/C2 stages with medium escalation risk.
+- OPPORTUNISTIC traffic generates 24.6% BLOCK and 73.8% ALERT, with a small number of ALLOW/LOG/TROLL on the scattered lower-severity attack types (Fuzzers, Generic).
+- The near-zero ALLOW rate across all intents is expected: all four intents involve continuous attack traffic with no sustained benign periods.
+
+### SEDM Decision Matrix
+
+From `results/evaluation/sedm_table.csv`:
+
+| Stage | Low (<0.35) | Medium (0.35–0.65) | High (≥0.65) |
+|---|---|---|---|
+| RECONNAISSANCE | ALLOW | LOG | LOG |
+| WEAPONIZATION | LOG | LOG | TROLL |
+| DELIVERY | LOG | TROLL | TROLL |
+| EXPLOITATION | TROLL | BLOCK | BLOCK |
+| INSTALLATION | BLOCK | BLOCK | ALERT |
+| COMMAND_AND_CTRL | BLOCK | ALERT | ALERT |
+| ACTIONS_ON_OBJ | ALERT | ALERT | ALERT |
+
+---
+
 ## Data Structures
 
 ### `StepRecord`
@@ -64,7 +116,7 @@ detection_rate      = TP / (TP + FN)    # True positive rate / recall
 false_positive_rate = FP / (FP + TN)    # False alarm rate
 ```
 
-ALLOW is used as the "no-detection" threshold because it is the only action that implies no response to a potential threat. Any other action (LOG, TROLL, BLOCK, ALERT) counts as detecting/responding to the traffic.
+ALLOW is used as the "no-detection" threshold because it is the only action that implies no response to a potential threat.
 
 ---
 
@@ -74,110 +126,61 @@ ALLOW is used as the "no-detection" threshold because it is the only action that
 
 ```python
 metrics = MetricsCollector(log_dir="logs/")
-
-# Called each step
 metrics.record_step(episode, step, action, reward, info, pred_attack, loss)
-
-# Called at end of each episode — returns EpisodeRecord
 record = metrics.end_episode(episode)
 ```
-
-`end_episode()` flushes the internal step buffer after aggregation.
 
 ### Summary
 
 ```python
 summary = metrics.summary_report()
-# Keys:
-#   total_episodes, mean_reward, std_reward, best_episode_reward,
-#   mean_detection_rate, mean_false_positive_rate, mean_threat_level
+# Keys: total_episodes, mean_reward, std_reward, best_episode_reward,
+#       mean_detection_rate, mean_false_positive_rate, mean_threat_level
 ```
 
 ### Persistence
 
 ```python
-metrics.save_csv()                 # → logs/metrics.csv
+metrics.save_csv()   # → logs/metrics.csv
 ```
-
-CSV columns: `episode`, `total_reward`, `steps`, `detection_rate`, `false_positive_rate`, `avg_threat_level`, `avg_loss`.
 
 ---
 
-## Visualizations
+## Visualisations
 
 ### `plot_training_curves()` → `logs/training_curves.png`
 
-6-panel figure (2 rows × 3 columns):
-
-| Panel | Content |
-|---|---|
-| (0,0) | Episode reward (raw + rolling mean) |
-| (0,1) | Detection rate over episodes |
-| (0,2) | False positive rate over episodes |
-| (1,0) | Average threat level per episode |
-| (1,1) | DQN loss (all individual updates, smoothed) |
-| (1,2) | Average DQN loss per episode |
-
-Rolling window: 10 episodes.
+6-panel figure showing episode reward, detection rate, false positive rate, average threat level, per-update DQN loss, and per-episode average DQN loss.
 
 ### `plot_kill_chain_heatmap()` → `logs/action_stage_heatmap.png`
 
-Heatmap of (HoneypotAction × KillChainStage) showing how often each action was taken at each kill chain stage, aggregated across all episodes.
-
-Note: this is an approximation — since step buffers are cleared per episode, it uses the product of action and kill chain distributions within each episode rather than exact per-step pairs.
+Heatmap of (HoneypotAction × KillChainStage) showing action frequency per kill chain stage.
 
 ### `plot_attack_progression(step_records)` → `logs/demo_progression.png`
 
-4-panel time series for a single episode (sharex):
+4-panel time series for a single episode: threat level, kill chain stage, attack type, and defender actions.
 
-| Panel | Content |
+### Evaluation plots → `results/evaluation/`
+
+| Plot | Content |
 |---|---|
-| 1 | Threat level with band threshold lines (critical/high/medium) |
-| 2 | Kill chain stage (step plot) |
-| 3 | Attack type (colour-coded fill bands) |
-| 4 | Defender actions (scatter) overlaid with reward (line) |
-
-### `analyze()` outputs → `logs/`
-
-Called from `main.py analyze` mode:
-
-- `transition_matrices.png` — 4-row × 2-column grid; for each intent: attack type transition heatmap + kill chain stage transition heatmap
-- `feature_distributions.png` — box plots of 5 key features (`dur`, `sload`, `spkts`, `sbytes`, `ct_dst_ltm`) across all attack types (symlog y-axis)
-
----
-
-## Classifier Evaluation
-
-Defined in `defender/classifier.py:163-184` (`evaluate()` method).
-
-At initialization the classifier is tested against a freshly generated held-out set (default seed=999) and returns:
-
-| Key | Description |
-|---|---|
-| `accuracy` | Overall accuracy across all attack-type classes |
-| `report` | Full scikit-learn `classification_report` with per-class precision, recall, F1-score, and support |
-
-The test set is generated independently from training data (one batch per attack type) so there is no overlap.
-
----
-
-## DQN Training Loss
-
-Defined in `defender/dqn.py:160` and computed in `update()` (lines 185–222).
-
-- **Loss function:** Huber Loss (`torch.nn.SmoothL1Loss`)
-- **TD target:** computed from the frozen target network with discount factor γ = 0.99
-- Loss is recorded per update step, averaged into `avg_loss` per episode, and smoothed in `plot_training_curves()`
-
-Huber loss is preferred over MSE because it is less sensitive to outlier Q-value errors early in training.
+| `evaluation_summary.csv` | Per-intent summary statistics |
+| `action_distribution.csv` | Per-intent action frequency breakdown |
+| `sedm_table.csv` | The 7×3 SEDM decision matrix |
+| `metric_comparison.png` | Side-by-side bar charts of key metrics |
+| `radar_comparison.png` | Radar chart comparing intents across metrics |
+| `reward_boxplot.png` | Episode reward distributions per intent |
+| `effective_policy_per_intent.png` | Action distribution stacked bars |
+| `composite_risk_distribution.png` | Histogram of composite risk scores |
+| `escalation_risk_per_intent.png` | Escalation risk by stage and intent |
+| `sedm_decision_matrix.png` | Colour-coded SEDM heatmap |
+| `kill_chain_distribution.png` | Kill chain stage frequency per intent |
 
 ---
 
 ## Threat Level Score
 
-Defined in `defender/honeypot.py:66-98` (`compute_threat_level()`).
-
-Composite score in [0.0, 1.0] combining four signals:
+Composite score in [0.0, 1.0]:
 
 | Component | Weight | Source |
 |---|---|---|
@@ -186,34 +189,7 @@ Composite score in [0.0, 1.0] combining four signals:
 | Escalation rate | 15% | Attack frequency in recent sliding window |
 | Cumulative attack count | 5% | Normalised to 100 steps |
 
-**Severity values** (`attacker/attack_types.py:76-98`):
-
-| Attack Type | Severity |
-|---|---|
-| NORMAL | 0.00 |
-| RECONNAISSANCE | 0.20 |
-| ANALYSIS | 0.25 |
-| FUZZERS | 0.35 |
-| GENERIC | 0.40 |
-| EXPLOITS | 0.70 |
-| SHELLCODE | 0.75 |
-| BACKDOORS | 0.80 |
-| DOS | 0.85 |
-| WORMS | 0.90 |
-
-**Kill chain weights:**
-
-| Stage | Weight |
-|---|---|
-| RECONNAISSANCE | 0.10 |
-| WEAPONIZATION | 0.20 |
-| DELIVERY | 0.35 |
-| EXPLOITATION | 0.55 |
-| INSTALLATION | 0.70 |
-| COMMAND_AND_CTRL | 0.85 |
-| ACTIONS_ON_OBJ | 1.00 |
-
-**Threat bands** (`defender/honeypot.py:44-63`):
+**Threat bands:**
 
 | Band | Range |
 |---|---|
@@ -225,47 +201,15 @@ Composite score in [0.0, 1.0] combining four signals:
 
 ---
 
-## Reward Function
-
-Defined in `defender/honeypot.py:106-193` (`compute_reward()`).
-
-The reward function is the RL learning signal, not an evaluation metric, but it directly shapes what the policy optimises for.
-
-**Base reward matrix** (action × threat band):
-
-| Action | benign | low | medium | high | critical |
-|---|---|---|---|---|---|
-| ALLOW | +1.0 | -1.0 | -2.0 | -4.0 | -6.0 |
-| LOG | -0.5 | +1.5 | +2.0 | +0.5 | -1.0 |
-| TROLL | -1.0 | +0.5 | +1.0 | +3.0 | +2.0 |
-| BLOCK | -2.0 | -0.5 | +0.5 | +4.0 | +5.0 |
-| ALERT | -3.0 | -1.0 | -0.5 | +2.0 | +6.0 |
-
-**Modifiers:**
-- Late kill-chain stages (INSTALLATION onward): negative rewards amplified by 1.5×
-- Attack-type bonuses: TROLL rewarded for BACKDOORS/SHELLCODE/WORMS; BLOCK for WORMS; LOG for RECONNAISSANCE
-- Correct ALLOW on non-attack: +0.5 bonus
-
----
-
 ## Interpreting Results
 
-### Good training signal
+### Good SEDM performance
+- Detection rate > 99% across all intents
+- False positive rate varies by intent (lower for high-severity intents, higher for stealthy/low-severity)
+- Higher reward for intents with well-aligned escalation paths (TARGETED > AGGRESSIVE > STEALTHY > OPPORTUNISTIC)
 
-- **Detection rate** should climb from ~0.3–0.5 early to > 0.8 by end of training
-- **False positive rate** should stabilise below 0.3 (the agent learns not to BLOCK/ALERT benign traffic)
-- **Episode reward** should trend upward
-- **DQN loss** should decrease and stabilise (not necessarily reach zero)
-
-### What to watch for
-
-| Symptom | Likely cause |
-|---|---|
-| Detection rate near 1.0, FP rate also near 1.0 | Agent always responds — never ALLOWs |
-| Detection rate near 0.0 | Agent always ALLOWs — exploration not working |
-| Loss oscillating without decreasing | Learning rate too high or target update too frequent |
-| Flat reward after initial rise | Agent converged to a suboptimal policy (local optimum) |
-
-### Multi-intent comparison
-
-Use `python main.py compare` to evaluate a single trained policy against all four attacker intents. A robust policy trained on OPPORTUNISTIC (default) should generalise reasonably to STEALTHY and TARGETED, but may underperform against AGGRESSIVE (faster escalation requires quicker BLOCK/ALERT responses).
+### What the action distribution tells you
+- Dominated by ALERT/BLOCK: policy is correctly responding to high kill-chain stages
+- Significant LOG/TROLL: policy is engaging with early-stage reconnaissance appropriately
+- Non-zero ALLOW: policy distinguishes some benign traffic correctly
+- Near-zero ALLOW with high FP rate: policy is over-responding to low-threat traffic

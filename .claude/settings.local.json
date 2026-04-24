@@ -16,7 +16,9 @@
       "Bash(dpkg -l python3-*)",
       "Bash(pip3 install:*)",
       "Bash(python3:*)",
-      "Bash(ls:*)"
+      "Bash(ls:*)",
+      "Bash(wc -l /home/caesar/honeyiq-implementation/latex/chapters/*.tex)",
+      "Bash(wc -w /home/caesar/honeyiq-implementation/latex/chapters/*.tex)"
     ]
   }
 }

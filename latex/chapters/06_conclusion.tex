@@ -4,79 +4,208 @@
 \chapter{Conclusion}
 \label{ch:conclusion}
 
-\section{Summary}
+\section{Summary of the Work}
 
-This thesis presented HoneyIQ, a simulation framework for training an
-adaptive honeypot defender using Deep Q-Networks against a structured,
-intent-driven attacker modelled on the Lockheed Martin Cyber Kill Chain.
+This thesis presented HoneyIQ, a simulation framework for adaptive honeypot
+management in which a structured, intent-driven attacker --- modelled on the
+Lockheed Martin Cyber Kill Chain~\citep{hutchins2011intelligence} --- is
+opposed by two defender policies: the Stage-Escalation Decision Matrix (SEDM)
+and a Deep Q-Network (DQN) baseline.
 
-The key contributions are:
+The work was motivated by three observations.
+First, contemporary cyber adversaries conduct structured, multi-stage campaigns
+that progress predictably through reconnaissance, weaponization, delivery,
+exploitation, installation, command-and-control, and actions on objectives.
+Second, honeypots provide a uniquely valuable defensive layer that can detect,
+observe, and deceive attackers without disrupting production systems, but their
+effectiveness depends on the quality of the response policy.
+Third, learned policies based on deep reinforcement learning --- while capable
+of high performance --- are fundamentally opaque and therefore difficult to
+deploy in operational security environments that require auditability and
+explainability.
 
+To address these challenges, this thesis made the following contributions.
+
+\subsection{HoneyIQ Simulation Framework}
+
+A fully self-contained, Gymnasium-compatible simulation environment implementing:
+%
 \begin{itemize}
-  \item A Markov-chain attacker that produces realistic network traffic
-        via UNSW-NB15-inspired feature distributions, with four intent
-        profiles encoding qualitatively distinct escalation strategies.
-  \item A DQN agent that learns a five-action honeypot policy from a
-        24-dimensional state vector encoding attack type, kill-chain stage,
-        threat level, escalation rate, and attacker intent.
-  \item A domain-informed reward function incorporating proportional
-        responses, late kill-chain urgency amplification, and
-        honeypot-specific intelligence bonuses for tarpitting.
-  \item A composite threat-level metric that integrates attack severity,
-        kill-chain progress, escalation rate, and cumulative attack count
-        into a single normalised signal.
-  \item Empirical evidence that the trained policy achieves a detection
-        rate above 0.8 and a false-positive rate below 0.3 on the training
-        intent, with moderate transfer to harder intent profiles.
+  \item A 24-dimensional state space combining one-hot attack type, kill chain
+        stage, and attacker intent with continuous threat level, attack count,
+        and escalation rate.
+  \item A five-action honeypot policy interface (ALLOW, LOG, TROLL, BLOCK,
+        ALERT) mapping response severity from passive passthrough to immediate
+        escalation.
+  \item A domain-informed reward function with three layers: a $5 \times 5$
+        base matrix, a late-stage amplifier for kill chain stages 4--6, and
+        attack-type-specific bonuses encoding honeypot best practices.
+  \item A comprehensive metrics layer computing per-step and per-episode
+        statistics including detection rate, false-positive rate, and
+        composite risk, with six visualisation types.
 \end{itemize}
 
-\section{Future Work}
+All experiments are fully reproducible without access to live network data.
 
-Several directions would extend and strengthen this work:
+\subsection{Intent-Aware Markov Attacker}
+
+A coupled pair of Discrete-Time Markov Chains governing attack-type and
+kill-chain-stage transitions, with four intent profiles encoded as element-wise
+transition modifiers:
+%
+\begin{itemize}
+  \item \textbf{Stealthy}: slow, low-severity campaigns biased toward
+        reconnaissance and backdoor activity.
+  \item \textbf{Aggressive}: fast, high-severity campaigns biased toward
+        DoS, Worms, and Exploits.
+  \item \textbf{Targeted}: focused exploitation chains progressing from
+        Exploits through Shellcode to Backdoors.
+  \item \textbf{Opportunistic}: scattered campaigns with moderate escalation
+        speed and diverse attack types.
+\end{itemize}
+
+Network features are sampled from per-attack parametric distributions
+calibrated to UNSW-NB15 signatures, providing a bridge between the simulation
+and real-world traffic characteristics.
+The kill-chain floor constraint (Equation~\ref{eq:floor}) ensures temporal
+consistency by preventing unrealistic stage regression.
+
+\subsection{Stage-Escalation Decision Matrix (SEDM)}
+
+The principal technical contribution: an interpretable, deterministic, zero-
+training-overhead policy implementing a five-step decision algorithm:
+%
+\begin{enumerate}
+  \item Compute escalation risk analytically from the intent-specific Markov
+        transition matrix.
+  \item Classify the risk into Low, Medium, or High band.
+  \item Perform a $7 \times 3$ matrix lookup (Table~\ref{tab:sedm_matrix}).
+  \item Apply three prioritised override rules (R1: Normal $\to$ ALLOW;
+        R2: DOS/WORMS $\to$ upgrade; R3: high rate $\to$ upgrade).
+  \item Log a composite risk score for situational awareness.
+\end{enumerate}
+
+The SEDM's transparency is its defining property: every decision is traceable
+to a specific matrix entry and override condition, enabling full audit without
+post-hoc explanation approximations.
+
+\subsection{Composite Threat-Level Metric}
+
+A weighted combination (attack severity 45\%, kill chain stage 35\%,
+escalation rate 15\%, cumulative count 5\%) providing a normalised threat
+index that drives both the reward function and the SEDM's composite risk score.
+The weight assignment reflects domain reasoning about the relative informational
+value of each signal.
+
+\subsection{DQN Baseline and Comparison}
+
+A full DQN implementation (24 $\to$ 256 $\to$ 128 $\to$ 64 $\to$ 5 with
+LayerNorm, experience replay, target network, Huber loss, and epsilon-greedy
+exploration) trained for 300 episodes on the Opportunistic intent.
+The DQN achieves comparable detection rates ($>$98.5\%) to the SEDM but requires
+150\,000 training steps, produces an opaque policy, and exhibits undefined
+false-positive rate characteristics due to the dense-attack training distribution.
+
+\section{Key Findings}
+
+\paragraph{Finding 1: Analytical escalation risk enables exact, training-free adaptation.}
+The Markov chain structure provides exact, per-intent escalation probabilities
+that the SEDM uses directly.
+This avoids the data dependency of RL-based approaches while correctly
+capturing the intent-specific differences in campaign tempo.
+The result is a policy that adapts to four qualitatively different attack
+profiles without any training or parameter tuning.
+
+\paragraph{Finding 2: Detection rates above 99\% are achievable with a deterministic matrix.}
+The SEDM achieves detection rates of 99.09--99.48\% across all four attacker
+intents.
+This performance is competitive with the DQN baseline and substantially
+exceeds what a random policy would achieve.
+The result challenges the common assumption that high detection rate requires
+a learned, adaptive policy.
+
+\paragraph{Finding 3: False positive rates reflect intent-specific traffic distributions.}
+False positive rates vary from 3.33\% (Targeted) to 35.56\% (Stealthy),
+reflecting the intrinsic difficulty of discriminating attack from borderline
+benign traffic at early kill chain stages under stealthy intent profiles.
+This variation is a property of the evaluation scenarios rather than a failure
+of the SEDM: the same policy that produces few false alarms against
+high-severity campaigns naturally produces more against stealthy campaigns
+where the traffic boundary is less sharp.
+
+\paragraph{Finding 4: Interpretability and detection performance are compatible.}
+The SEDM achieves detection rates comparable to the DQN with full
+interpretability, zero training overhead, and superior cross-intent
+consistency.
+This finding supports the recommendation of \citet{rudin2019stop} to prefer
+interpretable models in high-stakes domains when the problem structure permits
+a good interpretable solution --- and the kill chain model clearly provides
+such a structure.
+
+\paragraph{Finding 5: DQN specialises to the training distribution.}
+The DQN's effective strategy of ``almost never ALLOW'' achieves high
+detection on the Opportunistic training distribution but would not generalise
+to scenarios with more balanced benign/attack traffic.
+This specialisation is an artefact of the dense-attack training environment,
+not an inherent limitation of DQN, but it illustrates the importance of
+training distribution design for RL-based security policies.
+
+\section{Implications for Practice}
+
+The results of this thesis suggest several practical implications for
+honeypot management system design:
 
 \begin{enumerate}
-  \item \textbf{Multi-intent training.}
-        Exposing the DQN to a mixture of intent profiles during training
-        would improve cross-intent robustness without requiring intent
-        inference.
+  \item \textbf{Start with an interpretable policy.}
+        The SEDM's performance, immediate operability, and auditability make
+        it the appropriate default for initial deployment.
+        A security team can review, understand, and modify the 7-row matrix
+        without requiring machine learning expertise.
 
-  \item \textbf{Adaptive attacker.}
-        Modelling the attacker as a best-responding agent using
-        multi-agent RL or game-theoretic formulations would introduce
-        true adversarial dynamics.
+  \item \textbf{Use the kill chain model explicitly.}
+        The strong correlation between kill chain stage and appropriate
+        response severity (ALLOW at Reconnaissance, ALERT at C2 and beyond)
+        is a robust design principle that should be reflected in any honeypot
+        policy, whether interpretable or learned.
 
-  \item \textbf{Real-world feature integration.}
-        Fitting feature distributions to the actual UNSW-NB15 records,
-        or using a generative model (e.g.\ a conditional VAE) trained on
-        real packet data, would reduce the simulation-to-reality gap.
+  \item \textbf{Calibrate expectations on false positives by attacker profile.}
+        A single false positive rate threshold is not appropriate for all
+        deployment contexts.
+        Networks facing stealthy APT campaigns should tolerate higher false
+        positive rates at early kill chain stages; networks facing opportunistic
+        automated attackers can operate with much lower thresholds.
 
-  \item \textbf{Classifier-in-the-loop.}
-        Replacing ground-truth attack labels in the DQN state with Random
-        Forest classifier outputs would test policy robustness under
-        observation noise, a prerequisite for real deployment.
-
-  \item \textbf{Uncertainty-aware policy.}
-        Replacing the standard DQN with a distributional RL variant
-        (e.g.\ C51 or QR-DQN) would allow the agent to reason about
-        aleatoric uncertainty in threat levels, potentially improving
-        decisions at threat-band boundaries.
-
-  \item \textbf{Evaluation on real honeypot logs.}
-        Replaying captured honeypot sessions through the trained policy
-        would provide an out-of-distribution test of generalisation to
-        genuine attack traffic.
+  \item \textbf{Use RL for refinement, not as a starting point.}
+        A DQN trained alongside a deployed SEDM --- using live honeypot
+        interactions as the data source --- could discover refinements to the
+        matrix that are not immediately obvious to human designers.
+        This staged approach separates the need for immediate interpretability
+        (SEDM) from the potential for long-term optimisation (DQN).
 \end{enumerate}
 
 \section{Closing Remarks}
 
-HoneyIQ demonstrates that reinforcement learning is a viable framework for
-adaptive honeypot management.
-The combination of a structured attacker model, a domain-informed reward
-function, and a stable DQN implementation produces a policy that behaves
-in alignment with honeypot best practices: engaging low-severity traffic
-passively, tarpitting persistent attackers for intelligence, and escalating
-to BLOCK or ALERT as campaigns reach critical kill-chain stages.
-The simulation infrastructure is fully self-contained, enabling rapid
-iteration on both the attacker model and the defender's learning algorithm,
-and provides a foundation for more sophisticated adversarial training
-scenarios in future research.
+HoneyIQ demonstrates that the mathematical structure of the Markov attacker
+model --- specifically, the analytically computable escalation probabilities
+derived from intent-specific transition matrices --- provides sufficient
+information to design a high-quality, interpretable honeypot policy without
+any machine learning.
+The Stage-Escalation Decision Matrix translates the probabilistic dynamics
+of the kill chain into a human-readable response protocol that aligns with
+honeypot best practices: engaging low-severity traffic passively, tarpitting
+persistent attackers for intelligence, and escalating decisively as campaigns
+reach critical kill-chain stages.
+
+The simulation infrastructure provides a principled, self-contained
+foundation for future research.
+Replacing synthetic feature distributions with real data fits, integrating
+the classifier output into the decision pipeline, modelling an adaptive
+attacker who responds to the defender's actions, and extending to a multi-node
+network topology are natural next steps that would progressively close the gap
+between simulation and operational deployment.
+
+As networked systems face increasingly sophisticated adversaries, the
+combination of structured attacker models, analytically-grounded decision
+policies, and rigorous simulation-based evaluation offers a principled path
+toward honeypot management that is simultaneously effective, trustworthy,
+and deployable in the operational environments that need it most.

@@ -1,17 +1,17 @@
 # HoneyIQ Documentation
 
-HoneyIQ is a cybersecurity attacker-defender simulation that uses Deep Reinforcement Learning to train a honeypot-based defender against a Markov-chain-driven attacker.
+HoneyIQ is a cybersecurity attacker-defender simulation for adaptive honeypot management. The primary decision policy is the **Stage-Escalation Decision Matrix (SEDM)** — an interpretable, deterministic policy — evaluated against a Markov-chain-driven attacker progressing through the Lockheed Martin Cyber Kill Chain.
 
 ## Documentation Index
 
 | Document | Contents |
 |---|---|
-| [Theoretical Background](theoretical_background.md) | Reinforcement learning, DQN, Markov chains, cyber kill chain, honeypots, UNSW-NB15 |
+| [Theoretical Background](theoretical_background.md) | RL, DQN, Markov chains, SEDM design, cyber kill chain, honeypots, UNSW-NB15 |
 | [Architecture](architecture.md) | Component diagram, data flow, module responsibilities |
 | [Attacker Module](attacker.md) | Attack types, kill chain stages, intent profiles, transition model, feature simulation |
-| [Defender Module](defender.md) | DQN agent, attack classifier, honeypot actions, reward function |
+| [Defender Module](defender.md) | SEDM policy, DQN baseline, attack classifier, honeypot actions, reward function |
 | [Environment](environment.md) | Gymnasium wrapper, state space, action space, episode lifecycle |
-| [Evaluation & Metrics](evaluation.md) | Metrics, detection rate, false positive rate, visualizations |
+| [Evaluation & Metrics](evaluation.md) | Results, metrics, detection rate, false positive rate, visualizations |
 | [Quick Start](quickstart.md) | Installation, training, demo, analysis |
 | [API Reference](api_reference.md) | Class and function signatures |
 

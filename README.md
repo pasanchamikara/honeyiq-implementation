@@ -1,6 +1,6 @@
 # HoneyIQ
 
-A cybersecurity attacker-defender simulation that trains a honeypot-based defender using **Deep Q-Network (DQN)** reinforcement learning against a **Markov-chain-driven attacker** progressing through the cyber kill chain.
+A cybersecurity attacker-defender simulation that evaluates a honeypot-based defender using a **Stage-Escalation Decision Matrix (SEDM)** — an interpretable, deterministic policy — against a **Markov-chain-driven attacker** progressing through the Lockheed Martin Cyber Kill Chain.
 
 ---
 
@@ -8,10 +8,34 @@ A cybersecurity attacker-defender simulation that trains a honeypot-based defend
 
 HoneyIQ models the cybersecurity problem as a two-agent game:
 
-- **Attacker** — follows a stochastic Markov chain through 10 attack types and 7 kill chain stages, generating synthetic UNSW-NB15-style network flow features at each step.
-- **Defender** — observes the environment state, classifies incoming traffic with a RandomForest, and selects one of 5 honeypot actions via a DQN policy.
+- **Attacker** — follows a stochastic Markov chain through 10 attack types and 7 kill chain stages, generating synthetic UNSW-NB15-style network flow features at each step. Four intent profiles (Stealthy, Aggressive, Targeted, Opportunistic) bias the transition probabilities to produce qualitatively distinct campaigns.
+- **Defender** — observes the environment state, classifies incoming traffic with a RandomForest, and selects one of 5 honeypot actions via the **SEDM policy** (ALLOW / LOG / TROLL / BLOCK / ALERT).
 
-The defender learns to maximize cumulative reward by correctly matching its response (ALLOW / LOG / TROLL / BLOCK / ALERT) to the actual threat level.
+The SEDM maps the current kill chain stage and a Markov-chain-derived escalation risk score to an optimal action, with override rules for high-impact attack types and elevated attack frequency.
+
+---
+
+## Key Results
+
+Evaluated over 30 episodes per intent (200 steps each):
+
+| Intent | Mean Reward | Detection Rate | False Positive Rate | Avg Threat Level |
+|---|---|---|---|---|
+| STEALTHY | 1012.22 ± 51.37 | **99.09%** | 35.56% | 0.806 |
+| AGGRESSIVE | 1090.84 ± 19.80 | **99.47%** | 6.67% | 0.854 |
+| TARGETED | 1127.10 ± 20.98 | **99.48%** | 3.33% | 0.853 |
+| OPPORTUNISTIC | 896.05 ± 32.98 | **99.41%** | 15.00% | 0.790 |
+
+The SEDM achieves near-perfect detection rates across all four attacker intent profiles, demonstrating strong cross-intent generalisation.
+
+### Action Distribution
+
+| Intent | ALLOW | LOG | TROLL | BLOCK | ALERT |
+|---|---|---|---|---|---|
+| STEALTHY | 0.0% | 1.1% | 0.7% | 17.9% | 80.3% |
+| AGGRESSIVE | 0.0% | 0.0% | 0.0% | 4.6% | 95.4% |
+| TARGETED | 0.0% | 0.5% | 0.1% | 5.4% | 94.0% |
+| OPPORTUNISTIC | 0.1% | 1.0% | 0.4% | 24.6% | 73.8% |
 
 ---
 
@@ -32,7 +56,8 @@ honeyiq-implementation/
 ├── defender/
 │   ├── honeypot.py            # HoneypotAction enum; threat-level formula; reward function
 │   ├── classifier.py          # AttackClassifier (RandomForest on synthetic data)
-│   ├── dqn.py                 # DQNNetwork, ReplayBuffer, DQNAgent
+│   ├── matrix_policy.py       # MatrixPolicy (SEDM) — primary decision policy
+│   ├── dqn.py                 # DQNNetwork, ReplayBuffer, DQNAgent (baseline)
 │   └── defender.py            # Defender orchestrator (classifier + DQN)
 │
 ├── environment/
@@ -50,7 +75,13 @@ honeyiq-implementation/
 ├── assets/                    # Architecture diagrams
 ├── docs/                      # Extended documentation
 ├── models/                    # Saved checkpoints (dqn_agent.pt, classifier.joblib)
-└── logs/                      # CSV metrics and PNG plots
+├── logs/                      # Training CSV metrics and PNG plots
+└── results/                   # Evaluation outputs (per-intent CSVs and plots)
+    └── evaluation/
+        ├── evaluation_summary.csv
+        ├── action_distribution.csv
+        ├── sedm_table.csv
+        └── *.png               # Visualisation plots
 ```
 
 ---
@@ -68,17 +99,17 @@ Ten categories drawn from the UNSW-NB15 dataset:
 | 1 | RECONNAISSANCE | 0.20 | Reconnaissance |
 | 2 | ANALYSIS | 0.25 | Weaponization |
 | 3 | FUZZERS | 0.35 | Delivery |
-| 4 | EXPLOITS | 0.70 | Exploitation |
-| 5 | BACKDOORS | 0.80 | Installation |
+| 4 | GENERIC | 0.40 | Delivery |
+| 5 | EXPLOITS | 0.70 | Exploitation |
 | 6 | SHELLCODE | 0.75 | Exploitation |
-| 7 | GENERIC | 0.40 | Delivery |
+| 7 | BACKDOORS | 0.80 | Installation |
 | 8 | DOS | 0.85 | Actions on Objectives |
 | 9 | WORMS | 0.90 | Command & Control |
 
-Each attack type has parametric feature distributions for 15 UNSW-NB15 network flow fields (`dur`, `sbytes`, `dbytes`, `sttl`, `dttl`, `sloss`, `dloss`, `sload`, `dload`, `spkts`, `dpkts`, `swin`, `dwin`, `ct_srv_src`, `ct_dst_ltm`).
+Each attack type has parametric feature distributions for 15 UNSW-NB15 network flow fields.
 
 #### Attacker intents (`attacker/attack_types.py`)
-Four intent profiles that bias the transition probabilities:
+Four intent profiles that bias the Markov transition probabilities:
 
 | Intent | Behaviour |
 |---|---|
@@ -87,16 +118,30 @@ Four intent profiles that bias the transition probabilities:
 | TARGETED | Focused exploit chain → shellcode → backdoor → lateral movement |
 | OPPORTUNISTIC | Scattered; elevated fuzzer and generic attack rates |
 
-#### Transition model (`attacker/transition_model.py`)
-Two separate row-stochastic matrices are maintained:
-- **Attack matrix** (10 × 10): next attack type given current
-- **Stage matrix** (7 × 7): next kill chain stage given current
-
-Base matrices are multiplied element-wise by intent-specific modifiers, then row-normalized. The attacker agent always takes the max of the sampled stage and the attack's primary stage to prevent unrealistic regression.
-
 ---
 
 ### Defender
+
+#### Stage-Escalation Decision Matrix (`defender/matrix_policy.py`)
+
+The primary decision policy. Maps (kill chain stage, escalation risk band) → honeypot action:
+
+| Stage / Band | Low (<0.35) | Medium (0.35–0.65) | High (≥0.65) |
+|---|---|---|---|
+| RECONNAISSANCE | ALLOW | LOG | LOG |
+| WEAPONIZATION | LOG | LOG | TROLL |
+| DELIVERY | LOG | TROLL | TROLL |
+| EXPLOITATION | TROLL | BLOCK | BLOCK |
+| INSTALLATION | BLOCK | BLOCK | ALERT |
+| COMMAND_AND_CTRL | BLOCK | ALERT | ALERT |
+| ACTIONS_ON_OBJ | ALERT | ALERT | ALERT |
+
+**Escalation risk** is computed from the intent-specific Markov chain as P(next stage > current stage).
+
+**Override rules** (applied after matrix lookup):
+- R1: Normal traffic → always ALLOW
+- R2: DOS or WORMS → upgrade action one level
+- R3: Escalation rate > 0.80 → upgrade action one level
 
 #### Honeypot actions & reward (`defender/honeypot.py`)
 
@@ -108,74 +153,31 @@ Base matrices are multiplied element-wise by intent-specific modifiers, then row
 | BLOCK | High threats (firewall) |
 | ALERT | Critical threats (immediate escalation) |
 
-Threat level is computed as a weighted composite:
-```
-threat = 0.45 × attack_severity
-       + 0.35 × kill_chain_weight
-       + 0.15 × escalation_rate   (sliding window fraction of recent attacks)
-       + 0.05 × min(1, attack_count / 100)
-```
-
-Rewards are looked up from a 5 × 5 action-by-threat-band matrix. Late kill chain stages (Installation, C2, Actions on Objectives) amplify negative rewards by 1.5×. Specific bonuses apply for high-value honeypot interactions (trolling backdoors/worms, blocking worms, logging reconnaissance).
-
 #### Attack classifier (`defender/classifier.py`)
-A `RandomForestClassifier` (scikit-learn) trained on synthetic data generated directly by the attacker's feature simulator. Key properties:
-- `class_weight='balanced'` handles class imbalance
-- `StandardScaler` normalizes features before training and inference
-- `fit_from_simulation()` generates data and fits in one call
-- `evaluate()` reports per-class precision/recall/F1 on a held-out test set
+A `RandomForestClassifier` (scikit-learn) trained on synthetic data generated by the attacker's feature simulator. Uses `class_weight='balanced'` and `StandardScaler` normalisation.
 
 #### DQN agent (`defender/dqn.py`)
-
-| Component | Detail |
-|---|---|
-| Architecture | Fully connected: 24 → 256 → 128 → 64 → 5, with `LayerNorm` + ReLU per layer |
-| Exploration | Epsilon-greedy with exponential decay (`ε_start=1.0`, `ε_end=0.05`, `decay=0.997`) |
-| Replay buffer | Fixed-capacity circular deque (default 15,000 transitions) |
-| Loss | Huber loss (SmoothL1) for robustness to outlier rewards |
-| Optimization | Adam optimizer with gradient clipping (`max_norm=10`) |
-| Target network | Hard copy from policy net every `target_update_freq` steps |
-
-#### Defender orchestrator (`defender/defender.py`)
-Wraps the classifier and DQN agent with a clean API:
-- `observe(state, features, training)` → classifies features, selects DQN action
-- `learn(state, action, reward, next_state, done)` → stores transition, triggers update
-- `save(model_dir)` / `load(model_dir)` → persists both components independently
+Baseline deep learning policy (24 → 256 → 128 → 64 → 5), retained for comparison. Uses experience replay, target network, Huber loss, and epsilon-greedy exploration.
 
 ---
 
 ### Environment (`environment/cyber_env.py`)
 
-A standard **Gymnasium** environment (`gym.Env`).
-
-**State vector** (24 floats):
+A standard **Gymnasium** environment. State vector (24 floats):
 ```
 [0:10]   attack_type one-hot       (10 classes)
 [10:17]  kill_chain_stage one-hot  (7 stages)
 [17]     threat_level              float [0, 1]
-[18]     attack_count_normalized   float [0, 1]  — min(1, count/100)
-[19]     escalation_rate           float [0, 1]  — sliding window
+[18]     attack_count_normalized   float [0, 1]
+[19]     escalation_rate           float [0, 1]
 [20:24]  attacker_intent one-hot   (4 intents)
 ```
 
-**Action space**: `Discrete(5)` — one per `HoneypotAction`.
-
-Each call to `step(action)` advances the attacker by one step, computes threat level and reward, and returns the next state.
-
----
-
-### Metrics (`evaluation/metrics.py`)
-
-`MetricsCollector` accumulates `StepRecord` objects during an episode and aggregates them into an `EpisodeRecord` at episode end. Tracked quantities:
-
-| Metric | Definition |
-|---|---|
-| Detection rate | TP / (TP + FN) — attacks where action ≠ ALLOW |
-| False positive rate | FP / (FP + TN) — benign traffic blocked/alerted |
-| Avg threat level | Mean threat across all steps |
-| Avg DQN loss | Mean Huber loss per episode |
-
-Built-in visualizations: training curves, kill-chain action heatmap, single-episode attack progression.
+Composite threat level:
+```
+T = 0.45 × attack_severity + 0.35 × kill_chain_weight
+  + 0.15 × escalation_rate + 0.05 × min(1, attack_count/100)
+```
 
 ---
 
@@ -187,7 +189,7 @@ python -m venv venv && source venv/bin/activate
 pip install -r requirements.txt
 ```
 
-### Train
+### Train (DQN baseline)
 ```bash
 python main.py train --episodes 300 --intent OPPORTUNISTIC
 ```
@@ -197,9 +199,9 @@ python main.py train --episodes 300 --intent OPPORTUNISTIC
 python main.py demo --intent STEALTHY --steps 150
 ```
 
-### Compare the policy across all attacker intents
+### Compare SEDM policy across all attacker intents
 ```bash
-python main.py compare --episodes 5 --steps 200
+python main.py compare --episodes 30 --steps 200
 ```
 
 ### Visualize transition matrices and feature distributions
@@ -211,22 +213,17 @@ python main.py analyze
 
 ## Notebooks
 
-Interactive walkthroughs in `notebooks/`:
-
 | Notebook | Contents |
 |---|---|
-| `01_attacker_model.ipynb` | Enumerations, transition matrix heatmaps, feature distributions, trajectory visualization |
-| `02_defender_model.ipynb` | Reward matrix, classifier training & evaluation, DQN architecture, epsilon schedule |
+| `01_attacker_model.ipynb` | Enumerations, transition matrix heatmaps, feature distributions, trajectory visualisation |
+| `02_defender_model.ipynb` | Reward matrix, classifier training & evaluation, DQN architecture, SEDM decision matrix |
 | `03_environment_and_metrics.ipynb` | Gym API walkthrough, random-policy episode, episode metric plots |
-| `04_training_and_evaluation.ipynb` | Full training run, training curves, demo/compare/analyze modes |
-
-Launch with:
-```bash
-jupyter notebook notebooks/
-```
+| `04_training_and_evaluation.ipynb` | SEDM evaluation, cross-intent comparison, result visualisation |
 
 ---
 
 ## Extended Documentation
 
-See [`docs/`](docs/) for in-depth coverage of each component, theoretical background (RL, DQN, Markov chains, kill chain model), API reference, and architecture diagrams.
+See [`docs/`](docs/) for in-depth coverage of each component, theoretical background, API reference, and architecture diagrams.
+
+See [`results/evaluation/`](results/evaluation/) for evaluation CSVs and visualisation plots.

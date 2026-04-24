@@ -291,7 +291,58 @@ The classifier provides a **predicted attack type** at each step. This predictio
 
 ---
 
-## 10. State Space Encoding
+## 10. Stage-Escalation Decision Matrix (SEDM)
+
+The SEDM is the primary decision policy in HoneyIQ. It replaces stochastic RL with a
+deterministic, interpretable decision procedure grounded in the Markov chain model.
+
+### Algorithm
+
+1. **Escalation risk**: Query the intent-specific transition model for P(next stage > current stage):
+   ```
+   esc_risk = Σ P(next_stage = s') for all s' > current_stage
+   ```
+
+2. **Band classification**:
+   - Low:    esc_risk < 0.35
+   - Medium: 0.35 ≤ esc_risk < 0.65
+   - High:   esc_risk ≥ 0.65
+
+3. **Matrix lookup** (7 stages × 3 bands → action):
+
+   | Stage / Band | Low | Medium | High |
+   |---|---|---|---|
+   | RECONNAISSANCE | ALLOW | LOG | LOG |
+   | WEAPONIZATION | LOG | LOG | TROLL |
+   | DELIVERY | LOG | TROLL | TROLL |
+   | EXPLOITATION | TROLL | BLOCK | BLOCK |
+   | INSTALLATION | BLOCK | BLOCK | ALERT |
+   | COMMAND_AND_CTRL | BLOCK | ALERT | ALERT |
+   | ACTIONS_ON_OBJ | ALERT | ALERT | ALERT |
+
+4. **Override rules**:
+   - R1: NORMAL traffic → always ALLOW
+   - R2: DOS or WORMS → upgrade action one level
+   - R3: escalation_rate > 0.80 → upgrade action one level
+
+5. **Composite risk score** (for logging, does not affect action):
+   ```
+   risk = 0.35 × stage_weight + 0.35 × esc_risk
+        + 0.15 × attack_severity + 0.15 × escalation_rate
+   ```
+
+### Evaluation Results (30 episodes × 200 steps per intent)
+
+| Intent | Detection Rate | False Positive Rate | Mean Reward |
+|---|---|---|---|
+| STEALTHY | 99.09% | 35.56% | 1012.22 |
+| AGGRESSIVE | 99.47% | 6.67% | 1090.84 |
+| TARGETED | 99.48% | 3.33% | 1127.10 |
+| OPPORTUNISTIC | 99.41% | 15.00% | 896.05 |
+
+---
+
+## 11. State Space Encoding
 
 The 24-dimensional state vector uses a mix of one-hot encoding and normalised continuous values:
 

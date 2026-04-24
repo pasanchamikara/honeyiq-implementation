@@ -4,79 +4,323 @@
 \chapter{Introduction}
 \label{ch:introduction}
 
-\section{Motivation}
+\section{Motivation and Context}
 
-Cyber attacks have grown in sophistication and frequency, placing critical
-infrastructure, financial systems, and personal data at persistent risk.
-Traditional intrusion-detection systems (IDS) rely on static rule bases or
-fixed-threshold anomaly detectors that struggle to adapt as attacker
-strategies evolve.
-Honeypots --- decoy systems that attract and study attackers --- offer a
-complementary defence layer, but their effectiveness depends on when and how
-a defender engages with each suspicious connection.
+The modern networked enterprise operates in an environment of persistent,
+structured adversarial pressure.
+The global cost of cybercrime exceeded USD\,8 trillion in 2023 and is
+projected to reach USD\,10.5 trillion annually by 2025~\citep{cisa2023threat}.
+These figures reflect not merely the direct cost of successful intrusions ---
+data theft, ransomware payments, system downtime --- but also the growing
+investment required to maintain defensive infrastructure against an ever-more-
+sophisticated threat landscape.
 
-Reinforcement learning (RL) provides a natural framework for this decision
-problem: an agent repeatedly chooses how to respond to incoming traffic and
-receives a reward signal that encodes domain knowledge about correct
-behaviour.
-When combined with deep neural networks, RL agents can learn non-linear
-policies from high-dimensional observations without hand-crafted feature
-engineering.
+Contemporary adversaries operate with strategic intent.
+Advanced Persistent Threat (APT) groups sponsored by nation-states, organised
+criminal syndicates, and increasingly automated malware ecosystems conduct
+multi-stage campaigns that unfold over days, weeks, or months.
+These campaigns follow recognisable patterns: initial reconnaissance of the
+target network, followed by weapon development, delivery of malicious payloads,
+exploitation of discovered vulnerabilities, establishment of persistent
+backdoors, command-and-control communication, and finally the execution of
+the mission objective.
+The Lockheed Martin Cyber Kill Chain~\citep{hutchins2011intelligence} formalises
+this progression into seven sequential phases and has become the standard
+reference model for structuring both threat intelligence and defensive
+countermeasures.
+
+\subsection{The Limitations of Static Defences}
+
+Traditional network defences are designed around the principle of known-threat
+identification.
+Signature-based Intrusion Detection Systems (IDS) such as Snort and Suricata
+maintain databases of known malicious patterns and alert when network traffic
+matches a signature.
+This approach is effective against catalogued threats but fundamentally blind to
+novel or zero-day exploits~\citep{tavallaee2009detailed}.
+When an adversary deploys a new technique not yet in the signature database,
+the IDS produces no alert.
+
+Fixed-threshold anomaly detectors address this limitation by flagging deviations
+from a statistical baseline rather than matching known patterns.
+However, the baseline calibration problem is severe in practice: thresholds
+that are sensitive enough to detect subtle intrusions tend to generate
+unmanageable volumes of false alarms, overwhelming security operations centre
+(SOC) analysts.
+Thresholds set conservatively to reduce false alarms miss the stealthy,
+low-and-slow campaigns favoured by sophisticated adversaries.
+
+Rule-based honeypot management systems face a related challenge.
+A honeypot administrator must specify in advance how the system should respond
+to each observed traffic pattern: what level of engagement warrants logging
+versus blocking versus alerting.
+These rules are effective when the anticipated threat matches the rule designer's
+expectations, but adversaries adapt.
+An attacker who discovers that certain traffic patterns trigger immediate
+blocking may modify their approach to stay below the detection threshold
+while still achieving their objectives.
+
+\subsection{Honeypots as Adaptive Decoys}
+
+Honeypots offer a qualitatively different defensive capability.
+A decoy system placed within or at the perimeter of a network attracts
+attacker attention by appearing to be a valuable, vulnerable target.
+Any interaction with the honeypot is inherently suspicious: legitimate users
+have no reason to access a system that serves no production purpose.
+This property eliminates the false positive problem for the detection
+\emph{event} itself --- but the question of \emph{how to respond} to a
+detected interaction remains.
+
+The response decision is non-trivial for several reasons.
+First, not all honeypot interactions are equally dangerous.
+A port scan that visits a honeypot is suspicious but low-severity; a
+successful exploit that installs a backdoor is critical.
+The response should be proportional: aggressive blocking of low-severity
+interactions wastes the intelligence value of honeypot engagement and
+may alert the attacker that they have been detected.
+Second, the optimal response depends on the attacker's position in the kill
+chain: intelligence gathering at RECONNAISSANCE stage is best served by
+quiet logging, while command-and-control activity at Stage 5 warrants
+immediate escalation.
+Third, the response should account for the attacker's likely \emph{next}
+move: if the attacker is likely to escalate to a more dangerous stage,
+the defender should pre-empt that escalation rather than waiting for it to
+occur.
+
+\subsection{Reinforcement Learning for Adaptive Defence}
+
+Reinforcement learning (RL) provides a principled framework for learning
+adaptive responses from experience~\citep{sutton2018reinforcement}.
+An RL agent interacts with a simulated environment, observes the consequences
+of its actions, and adjusts its policy to maximise cumulative reward.
+Applied to honeypot management, an RL agent could potentially discover
+response strategies that generalise across attacker behaviours and
+optimally balance intelligence gathering against containment.
+
+Deep Q-Networks (DQN)~\citep{mnih2015humanlevel} extend Q-learning to
+high-dimensional state spaces by using a neural network to approximate
+the action-value function.
+DQN demonstrated human-level performance on Atari games and has subsequently
+been applied to a range of sequential decision problems including robotic
+control, traffic management, and network defence~\citep{elderman2017adversarial}.
+However, DQN presents two significant challenges for operational cybersecurity:
+
+\begin{enumerate}
+  \item \textbf{Opacity}: The Q-values produced by a multi-layer perceptron
+        cannot be directly audited by a human analyst.
+        When a DQN agent chooses to BLOCK rather than LOG a specific
+        traffic pattern, there is no traceable explanation.
+        Post-hoc explanation methods such as SHAP~\citep{lundberg2017unified}
+        provide approximations, but these are not the policy itself.
+  \item \textbf{Data dependency}: DQN requires a substantial corpus of
+        interaction data before converging to a useful policy.
+        In a real honeypot deployment, collecting sufficient labelled
+        attack data to train a DQN without the simulation-to-reality
+        gap is itself a major challenge.
+\end{enumerate}
+
+\subsection{The Case for Interpretable Policies}
+
+In high-stakes operational domains, interpretability is not optional.
+Security operations centres are subject to regulatory requirements for
+incident reporting; the decision to block an IP address or raise a
+major alert must be defensible to auditors, management, and sometimes
+courts.
+A policy that cannot be explained is a policy that cannot be trusted with
+critical decisions.
+
+\citet{rudin2019stop} argues forcefully that in such domains, interpretable
+models should be preferred over black-box models: not only are they more
+auditable, they are often comparably accurate when the problem structure
+permits a good interpretable solution.
+The cybersecurity kill chain provides exactly this structure: the seven-stage
+model defines a clear ordinal risk progression, and the Markov chain provides
+exact, computable escalation probabilities.
+These quantities are sufficient to define a transparent policy that captures
+the key decision dimensions without requiring opaque function approximation.
 
 \section{Problem Statement}
 
-Two core challenges motivate this work.
-First, realistic attacker simulation is difficult: a synthetic attacker must
-produce plausible network traffic, follow a coherent escalation logic, and
-support multiple distinct intent profiles.
-Second, a learned honeypot policy must balance \emph{sensitivity}
-(detecting real attacks) against \emph{specificity} (avoiding false alarms
-that disrupt legitimate traffic), across a wide range of attack types and
-kill-chain stages.
+This thesis addresses three interrelated challenges in adaptive honeypot
+management:
+
+\paragraph{Challenge 1: Realistic attacker simulation.}
+Any evaluation of a honeypot policy requires a realistic adversary.
+Replaying captured attack logs does not support counterfactual evaluation:
+if the defender changes its responses, a static replay cannot model how the
+attacker would adapt.
+A synthetic attacker must produce plausible network traffic, follow a coherent
+escalation logic, and support multiple qualitatively distinct intent profiles
+that exercise the defender across a range of threat scenarios.
+The attacker must be parameterisable (to allow controlled experiments) and
+grounded in real-world data (to maintain ecological validity).
+
+\paragraph{Challenge 2: Intent-aware adaptive defence.}
+A static rule base is insufficient for adaptive adversaries.
+An effective honeypot policy must map observable signals --- current attack
+type, kill chain stage, escalation rate --- to appropriate responses in a
+way that generalises across different attacker behaviours and profiles.
+The policy must balance \emph{sensitivity} (responding to genuine threats)
+against \emph{specificity} (avoiding false alarms on borderline traffic)
+across a range of threat-level distributions.
+
+\paragraph{Challenge 3: Interpretability without sacrificing effectiveness.}
+RL policies trained with DQN or similar algorithms achieve strong empirical
+performance but offer no insight into their decision-making.
+Operational deployment requires policies that can be inspected, audited, and
+understood by human practitioners without relying on post-hoc approximations.
+The challenge is to design a policy that is simultaneously interpretable,
+computationally tractable, and effective across multiple attacker profiles.
 
 \section{Research Objectives}
 
-This thesis addresses the following objectives:
+This thesis addresses the following primary research objectives:
 
 \begin{enumerate}
-  \item Design a Markov-chain attacker model grounded in the Lockheed Martin
+  \item \textbf{Attacker modelling.}
+        Design a Markov-chain attacker grounded in the Lockheed Martin
         Cyber Kill Chain, with per-intent transition modifiers and
-        UNSW-NB15-inspired feature distributions.
-  \item Implement a DQN-based defender that learns an adaptive honeypot
-        response policy from a 24-dimensional state vector.
-  \item Develop a composite threat-level metric that integrates multiple
-        attack signals and drives a domain-informed reward function.
-  \item Evaluate the trained policy using detection rate, false-positive
-        rate, episode reward, and DQN training loss across all four attacker
-        intents.
+        UNSW-NB15-inspired parametric feature distributions, capable of
+        producing qualitatively distinct attack campaigns from a shared
+        base model.
+
+  \item \textbf{SEDM design.}
+        Develop the Stage-Escalation Decision Matrix (SEDM), a
+        transparent, deterministic honeypot policy that maps kill chain
+        stage and Markov-chain-derived escalation risk to a ranked
+        response action, with override rules for high-impact attack types
+        and elevated attack frequency.
+
+  \item \textbf{Threat quantification.}
+        Define a composite threat-level metric that integrates multiple
+        attack signals (type severity, kill chain stage, escalation rate,
+        cumulative pressure) into a single normalised index that drives
+        the reward function and the SEDM composite risk score.
+
+  \item \textbf{DQN baseline.}
+        Implement a DQN-based defender as a learned baseline, characterise
+        its training dynamics, and compare its performance properties
+        with the SEDM in terms of detection rate, false-positive rate,
+        and interpretability.
+
+  \item \textbf{Empirical evaluation.}
+        Evaluate both policies using detection rate, false-positive rate,
+        episode reward, and action distribution across all four attacker
+        intents, and characterise the interpretability--performance
+        trade-off in the context of operational cybersecurity requirements.
 \end{enumerate}
 
-\section{Contributions}
+\section{Principal Contributions}
 
-The principal contributions of this work are:
+The principal contributions of this work are as follows:
+
+\paragraph{HoneyIQ simulation framework.}
+A fully self-contained attacker--defender simulation built on the Gymnasium RL
+interface~\citep{towers2024gymnasium}.
+The framework implements a 24-dimensional state space combining one-hot encoded
+attack type, kill chain stage, and attacker intent with continuous threat level,
+attack count, and escalation rate.
+A five-action honeypot policy interface (ALLOW, LOG, TROLL, BLOCK, ALERT) is
+connected to a domain-informed reward function with three layers of domain
+knowledge.
+A comprehensive metrics and visualisation layer enables reproducible evaluation
+across all four attacker intents.
+All results can be reproduced without access to live network data.
+
+\paragraph{Intent-aware Markov attacker.}
+A coupled pair of Discrete-Time Markov Chains governing attack-type and
+kill-chain-stage transitions.
+Four intent profiles (Stealthy, Aggressive, Targeted, Opportunistic) are
+encoded as element-wise transition modifiers that produce qualitatively
+different attack campaigns from a shared base transition structure.
+Network features are sampled from per-attack parametric distributions
+calibrated to reproduce UNSW-NB15 attack signatures, providing a bridge
+between the simulation and real-world traffic statistics.
+
+\paragraph{Stage-Escalation Decision Matrix (SEDM).}
+An interpretable, deterministic, zero-training-overhead policy that:
+(1) computes escalation risk analytically from the intent-specific Markov
+transition matrix; (2) classifies the risk into three bands;
+(3) performs a $7 \times 3$ matrix lookup; and
+(4) applies three prioritised override rules.
+The SEDM is fully traceable from observable inputs to final action,
+printable on a single page, and modifiable by hand without retraining
+any model.
+
+\paragraph{Composite threat-level metric.}
+A weighted combination of attack severity (45\%), kill chain stage weight
+(35\%), escalation rate (15\%), and cumulative attack count (5\%) partitioned
+into five threat bands, driving both the reward function and the SEDM
+composite risk score.
+The weight assignment is grounded in domain reasoning about the relative
+informational value of each signal.
+
+\paragraph{Empirical evaluation across four intent profiles.}
+Across 30 evaluation episodes per attacker intent (120 total, 24\,000 steps),
+the SEDM achieves detection rates of 99.09\% (Stealthy), 99.47\% (Aggressive),
+99.48\% (Targeted), and 99.41\% (Opportunistic), with false positive rates
+ranging from 3.33\% to 35.56\%.
+These results are obtained with zero training overhead and full interpretability,
+demonstrating that the structure of the kill chain model permits a high-quality
+policy to be designed analytically.
+
+\section{Scope and Limitations}
+
+The scope of this thesis is intentionally bounded to enable rigorous evaluation:
 
 \begin{itemize}
-  \item A fully self-contained attacker--defender simulation environment
-        built on the Gymnasium RL interface, enabling reproducible
-        experiments without access to live network data.
-  \item An intent-aware Markov attacker that generates qualitatively
-        different attack campaigns from a shared base transition structure.
-  \item A reward function that encodes honeypot domain knowledge ---
-        including tarpitting bonuses, late kill-chain penalties, and
-        attack-type-specific incentives --- as a learnable signal for DQN.
-  \item Empirical evidence that a policy trained on \emph{Opportunistic}
-        traffic generalises to harder intent profiles.
+  \item The environment is a simulation; results are not validated against
+        live network traffic or real honeypot deployments.
+  \item Feature distributions are parametric approximations inspired by
+        UNSW-NB15 rather than fits to the actual dataset records.
+  \item The attacker's Markov chain evolves independently of the defender's
+        actions; the defender cannot deter or redirect the attacker.
+  \item Evaluation uses ground-truth attack labels; the Random Forest
+        classifier output is logged but not fed back into the SEDM.
+  \item Network topology is abstracted; all interactions are single-session
+        point contacts without spatial or topological structure.
 \end{itemize}
+
+These limitations are acknowledged in Chapter~\ref{ch:discussion} and
+form the basis for future work directions in Section~\ref{sec:future}.
 
 \section{Thesis Outline}
 
-Chapter~\ref{ch:background} surveys the theoretical foundations: reinforcement
-learning, Deep Q-Networks, Markov chains, the Cyber Kill Chain, honeypot
-technology, and the UNSW-NB15 dataset.
-Chapter~\ref{ch:methodology} describes the system design --- the attacker
-module, defender module, Gymnasium environment, and evaluation infrastructure.
-Chapter~\ref{ch:results} presents quantitative results from training and
-cross-intent evaluation experiments.
-Chapter~\ref{ch:discussion} interprets the findings, discusses limitations,
-and identifies directions for future research.
-Chapter~\ref{ch:conclusion} summarises the thesis.
+The remainder of this thesis is organised as follows.
+
+\noindent\textbf{Chapter~\ref{ch:background}} surveys the theoretical and
+empirical foundations of HoneyIQ: reinforcement learning and Markov Decision
+Processes, Deep Q-Networks, Discrete-Time Markov Chains, the Lockheed Martin
+Cyber Kill Chain, honeypot technology, the UNSW-NB15 dataset, Random Forests,
+and interpretable machine learning.
+Related work in RL-based intrusion response, attacker simulation, and
+honeypot optimisation is reviewed.
+
+\noindent\textbf{Chapter~\ref{ch:methodology}} describes the complete system
+design: the attacker module (Markov chains, intent profiles, feature
+simulation), the composite threat-level metric and reward function, the
+SEDM policy design and five-step algorithm, the DQN baseline architecture
+and training protocol, the Gymnasium environment, the Random Forest
+classifier, and the evaluation infrastructure.
+
+\noindent\textbf{Chapter~\ref{ch:results}} presents quantitative results
+from four sets of experiments: (1) SEDM cross-intent evaluation across all
+four attacker profiles, (2) per-intent action distribution analysis,
+(3) composite risk and escalation risk characterisation, and
+(4) DQN training dynamics.
+All numerical results are derived from the experiment logs in
+\texttt{results/evaluation/} and \texttt{logs/}.
+
+\noindent\textbf{Chapter~\ref{ch:discussion}} interprets the experimental
+findings, analyses the interpretability--performance trade-off, examines the
+structural reasons for the SEDM's cross-intent consistency, discusses
+limitations of the simulation, reviews key design decisions, and outlines
+future work directions.
+
+\noindent\textbf{Chapter~\ref{ch:conclusion}} summarises the thesis
+contributions and key findings.
+
+\noindent Appendix~\ref{app:api} provides the complete public API reference
+for each module, including function signatures and return types.
+Appendix~\ref{app:hyperparams} lists all configurable parameters used in
+training and evaluation, with their default values and rationale.

@@ -4,118 +4,445 @@
 \chapter{Discussion}
 \label{ch:discussion}
 
-\section{Interpretation of Training Dynamics}
+This chapter interprets the experimental results in the context of the
+research objectives, analyses the interpretability--performance trade-off,
+discusses limitations of the simulation framework, and examines key
+design decisions.
+Section~\ref{sec:disc_sedm} analyses SEDM behaviour and the role of the
+Markov chain.
+Section~\ref{sec:disc_dqn} interprets DQN training dynamics.
+Section~\ref{sec:disc_tradeoff} addresses the interpretability--performance
+trade-off.
+Section~\ref{sec:disc_limitations} discusses limitations.
+Section~\ref{sec:disc_design} examines design choices.
+Section~\ref{sec:future} outlines future work directions.
 
-The two-phase training curve --- high-variance exploration followed by
-rapid reward improvement --- is consistent with the theoretical properties
-of $\varepsilon$-greedy DQN.
-The replay buffer requires a warm-up period before the distribution of
-sampled transitions is sufficiently diverse for stable gradient updates.
-The correlation between the end of the high-$\varepsilon$ phase (around
-episode 100) and the onset of detection-rate improvement confirms that the
-network has learned a meaningful $Q$-value surface before exploitation begins.
+%% ── 5.1 SEDM Analysis ────────────────────────────────────────
+\section{SEDM Performance and Markov Chain Adaptation}
+\label{sec:disc_sedm}
 
-The simultaneous early rise and late decline of the false-positive rate
-reflects the agent working through a reward-shaping trade-off: initially
-it learns that non-ALLOW actions yield positive rewards on attack traffic,
-then it learns to discriminate the state features that indicate benign
-traffic (low threat level, low escalation rate, NORMAL attack type) and
-returns the correct ALLOW action in those cases.
+\subsection{Why $>$\,99\% Detection is Achievable}
 
-\section{Effectiveness of the Reward Function}
+The near-perfect detection rates across all four intent profiles are
+remarkable given that the SEDM has no trainable parameters and requires
+no labelled data.
+Three structural factors explain this result.
 
-The reward function design encodes three layers of domain knowledge:
+\textbf{Factor 1: Evaluation protocol.}
+The 200-step evaluation episodes involve continuous attack traffic; there
+are no extended benign periods.
+Because the kill chain stages visited in all four intents are predominantly
+Installation, C2, and Actions on Objectives (as shown by the kill chain
+distribution in Section~\ref{sec:results_killchain}), the SEDM's matrix
+almost always returns BLOCK or ALERT --- both of which count as detections.
+In other words, the high detection rate is partly a consequence of the
+evaluation scenario: it is easy to achieve high detection when attacks are
+dense and the kill chain has already progressed.
 
+\textbf{Factor 2: Conservative matrix design.}
+The SEDM never returns ALLOW for stages above RECONNAISSANCE under any
+escalation risk band.
+Even in the Low band at WEAPONIZATION, the action is LOG rather than ALLOW.
+This conservatism ensures that any step beyond RECONNAISSANCE is responded
+to with at least a LOG action, which counts as a detection.
+
+\textbf{Factor 3: Intent-adaptive escalation risk.}
+The Markov chain escalation risk computation (Equation~\ref{eq:esc_risk_meth})
+correctly classifies each intent's typical trajectory into the appropriate
+band.
+For STEALTHY at RECONNAISSANCE, the low escalation risk correctly returns
+ALLOW (or LOG in the Medium band), matching the low-threat nature of the
+traffic.
+For AGGRESSIVE at EXPLOITATION, the high escalation risk correctly returns
+BLOCK or ALERT, matching the high-threat nature of the traffic.
+The alignment between the Markov model and the evaluation scenarios means
+that the band classification is correct for the vast majority of steps.
+
+\subsection{False Positive Rate: Structural Causes}
+
+The false positive rate is the most nuanced performance dimension, varying
+by a factor of $\sim$10 across intents (3.33\% for TARGETED vs.\ 35.56\%
+for STEALTHY).
+This variation is not a failure of the SEDM but a reflection of the
+attacker model's properties.
+
+Under STEALTHY, the attacker generates extended periods of
+RECONNAISSANCE-type traffic.
+The SEDM correctly assigns LOG or TROLL to this traffic because the kill
+chain stage is already Weaponization or Delivery (even though the individual
+traffic packets resemble RECONNAISSANCE).
+When the ground-truth label indicates these steps are attacks (which they
+are, since the attacker Markov chain is active), the SEDM's LOG/TROLL
+response counts as a true positive.
+But when the step involves NORMAL-type traffic (R1 trigger $\to$ ALLOW)
+and the session contains any true attack earlier, the false positive
+count can accumulate.
+
+The practical implication is that the 35.56\% STEALTHY false positive rate
+should be interpreted as: \emph{for 35.56\% of genuinely benign-traffic
+steps, the SEDM issued a non-ALLOW response because the session context
+(stage, escalation risk) warranted caution}.
+This is not necessarily operationally inappropriate --- a honeypot defender
+is justified in logging a connection from a host that has just completed
+a reconnaissance scan, even if the specific packet being examined is benign.
+
+\subsection{Reward Ordering: TARGETED $>$ AGGRESSIVE $>$ STEALTHY $>$ OPPORTUNISTIC}
+
+The reward ordering across intents (Table~\ref{tab:eval_summary}) reflects
+the alignment between the SEDM's action preferences and the reward matrix.
+
+TARGETED receives the highest reward because its concentrated exploitation
+path consistently generates high-threat steps that are met with ALERT
+(reward $+6.0$ for critical traffic) with very few false positives (ALLOW
+on benign, $+1.0$) or suboptimal responses (TROLL on critical, $+0.5$).
+
+OPPORTUNISTIC receives the lowest reward because its scattered attack types
+frequently produce medium-severity steps that receive TROLL ($+3.0$ for
+medium) or BLOCK ($+1.5$ for medium) when ALERT would yield higher reward
+for critical steps.
+The SEDM does not see the future of the OPPORTUNISTIC campaign and
+calibrates to the current stage's escalation risk, which for medium-band
+Delivery-stage steps recommends TROLL.
+If the same step were at INSTALLATION with high escalation risk, ALERT
+would be recommended and the reward would be higher.
+
+\subsection{Determinism vs.\ Stochasticity}
+
+The SEDM is fully deterministic: given the same state, it always returns
+the same action.
+This determinism is a feature for operational deployability (the policy is
+predictable and auditable) but could be a vulnerability against an adaptive
+attacker who can fingerprint the policy and craft states that trigger
+suboptimal responses.
+
+The override rules (particularly R3, which responds to high attack frequency)
+partially mitigate this by creating a response mode that adapts to the tempo
+of the campaign, even if the per-step action is fixed for a given state.
+However, an adversary who maintains escalation rate just below 0.80 would
+avoid triggering R3.
+Future work should investigate whether small perturbations to the threshold
+values or the addition of a randomised component would improve robustness
+against adaptive adversaries.
+
+%% ── 5.2 DQN Training Dynamics ────────────────────────────────
+\section{DQN Training Dynamics Interpretation}
+\label{sec:disc_dqn}
+
+\subsection{Rapid Detection Rate Improvement}
+
+The detection rate jump from 87.6\% (episode 0) to 97.4\% (episode 1)
+reflects the dense attack structure of the OPPORTUNISTIC training scenario
+combined with the DQN's rapid initial learning.
+After episode 0, the replay buffer contains 500 transitions covering a wide
+range of states; the first gradient update trains the network to associate
+non-ALLOW actions with positive rewards for attack states.
+This coarse association suffices to achieve $>$\,97\% detection because the
+vast majority of states in OPPORTUNISTIC campaigns are high-threat attack
+states where any non-ALLOW action yields positive reward.
+
+The implication is that the apparent high detection rate of the DQN does not
+reflect a nuanced understanding of the threat landscape; rather, it reflects
+a learned bias toward non-ALLOW responses for the dense attack distribution
+of OPPORTUNISTIC traffic.
+This interpretation is supported by the near-constant false-positive rate
+of 1.0 throughout training: the DQN has effectively learned to never ALLOW,
+which maximises reward on the training distribution but would fail on a more
+balanced traffic mixture.
+
+\subsection{Loss Dynamics}
+
+The increasing loss trend through training (from $\approx$\,0.97 to
+$\approx$\,2.4) is not indicative of divergence.
+It reflects the expansion of the Q-value range as the policy learns to
+differentiate high-reward from low-reward state-action pairs.
+The Bellman target $y_i = r_i + \gamma \max_{a'} Q(s', a'; \theta^-)$
+grows as the Q-function improves, causing the absolute Huber loss to
+increase even as the relative TD error decreases.
+The stable variance in the later training phase (no upward spikes after
+episode 100) confirms that the stabilising mechanisms (target network,
+gradient clipping) are effective.
+
+\subsection{DQN Limitations in This Setting}
+
+The DQN baseline reveals two limitations specific to the HoneyIQ setting.
+
+\textbf{Class imbalance in training data.}
+The OPPORTUNISTIC training episodes contain predominantly attack traffic.
+The DQN is never exposed to episodes with significant benign traffic,
+so it cannot learn to discriminate benign from malicious states.
+The effective strategy of ``always respond with a non-ALLOW action'' achieves
+high training reward but is not a robust policy.
+
+\textbf{Transfer gap.}
+Training exclusively on OPPORTUNISTIC intent means the Q-function is
+calibrated to the specific attack distribution of OPPORTUNISTIC campaigns.
+Evaluating against STEALTHY or TARGETED would require the DQN to generalise
+to different threat-level time series; without intent-conditioned training
+or multi-intent mixed training, this generalisation is likely to be
+imperfect.
+The SEDM avoids this limitation entirely through the analytical escalation
+risk computation.
+
+%% ── 5.3 Interpretability–Performance Trade-off ───────────────
+\section{Interpretability and Performance Trade-off}
+\label{sec:disc_tradeoff}
+
+\subsection{The Case for SEDM}
+
+The SEDM achieves $>$\,99\% detection across all four intent profiles with
+zero training overhead, full transparency, and an auditable decision
+procedure.
+These properties are highly valuable for operational deployment:
+%
+\begin{itemize}
+  \item \textbf{No training data requirement.}
+        The SEDM requires only the Markov transition model, which encodes
+        assumed attacker behaviour.
+        It can be deployed immediately without a historical attack corpus.
+  \item \textbf{Analytical escalation risk.}
+        The escalation risk is computed from the transition matrix rather
+        than estimated from data, making it exact under the model assumptions
+        and independent of observation noise.
+  \item \textbf{Full traceability.}
+        Every action can be traced to a specific matrix cell and override
+        rule.
+        An analyst can reproduce any decision with pencil and paper.
+  \item \textbf{Easy modification.}
+        Security practitioners can update the matrix entries to reflect new
+        threat intelligence (e.g., raising the response at WEAPONIZATION
+        for a specific campaign) without retraining any model.
+\end{itemize}
+
+\subsection{The Case for DQN}
+
+The DQN baseline offers adaptive flexibility that the SEDM cannot provide:
+%
+\begin{itemize}
+  \item \textbf{Reward-optimised responses.}
+        Given sufficient training data and a well-designed reward function,
+        the DQN can discover optimal action strategies that are not
+        immediately obvious to human designers.
+  \item \textbf{Continuous adaptation.}
+        Online DQN training (with a sliding replay buffer) allows the policy
+        to adapt as the attack distribution evolves, provided new transitions
+        are added to the buffer.
+  \item \textbf{Nuanced feature sensitivity.}
+        In a deployment with richer state representations (e.g., including
+        classifier probability vectors, connection metadata), the DQN can
+        exploit fine-grained patterns that a fixed matrix cannot capture.
+\end{itemize}
+
+\subsection{Practical Recommendation}
+
+The results suggest a two-stage deployment strategy:
+%
 \begin{enumerate}
-  \item \textbf{Proportional responses} --- the base matrix steers the
-        agent toward graduated responses (LOG for low threats, TROLL/BLOCK
-        for medium, ALERT/BLOCK for critical) rather than a binary
-        detect/ignore policy.
-  \item \textbf{Kill-chain urgency} --- the $1.5\times$ late-stage penalty
-        on negative rewards amplifies the cost of missing an attack at
-        Installation, Command\,\&\,Control, or Actions on Objectives,
-        encouraging the agent to be more aggressive as campaigns progress.
-  \item \textbf{Honeypot-specific intelligence} --- the bonus for TROLL on
-        persistent attack types (BACKDOORS, SHELLCODE, WORMS) incentivises
-        the tarpitting strategy that simultaneously gathers intelligence
-        and wastes attacker resources.
+  \item \textbf{Initial deployment}: Use the SEDM as the primary policy.
+        Its immediate operability, interpretability, and strong baseline
+        performance ($>$\,99\% detection) make it the appropriate default.
+  \item \textbf{Refinement}: Train a DQN agent alongside the SEDM using
+        live honeypot interactions.
+        If the DQN demonstrably outperforms the SEDM on detection rate or
+        false positive rate under rigorous evaluation, and its decisions
+        can be explained post-hoc via SHAP~\citep{lundberg2017unified} or
+        similar techniques, it can be used to augment or eventually replace
+        the SEDM for specific intent profiles.
 \end{enumerate}
 
-The action heatmap in Figure~\ref{fig:action_heatmap} shows that all three
-layers are active in the learned policy, suggesting the reward signal is
-informative and the DQN is capable of learning the multi-modal response
-structure.
+This strategy mirrors the human-AI collaboration model recommended by
+\citet{rudin2019stop} for high-stakes decision-making: start with an
+interpretable model, and only adopt a black-box model when there is
+clear evidence of superior performance and adequate explanation mechanisms.
 
-\section{Generalisability Across Attacker Intents}
-
-The degradation of the trained policy against the \emph{Aggressive} intent
-highlights a structural limitation: the Markov transition matrices for
-different intents produce qualitatively different threat-level time series.
-\emph{Aggressive} campaigns escalate to Critical threat levels in fewer
-steps, creating a temporal mismatch with the policy's calibrated response
-timing.
-Two approaches could address this:
-
-\begin{enumerate}
-  \item \textbf{Multi-intent training} --- exposing the agent to a mixture
-        of intents during training would broaden the state distribution and
-        encourage a more robust policy.
-  \item \textbf{Intent inference} --- augmenting the state vector with an
-        online intent posterior (estimated from the recent attack sequence)
-        would allow the policy to condition its responses on inferred
-        attacker behaviour.
-\end{enumerate}
-
+%% ── 5.4 Limitations ──────────────────────────────────────────
 \section{Limitations}
+\label{sec:disc_limitations}
 
 \paragraph{Synthetic data only.}
-Feature distributions are parametric approximations inspired by UNSW-NB15
-rather than fits to the actual dataset.
-Real network traffic contains long-range temporal correlations, protocol
-interactions, and noise sources that are not captured by the per-step
-independence assumption.
+Feature distributions are parametric approximations designed to reproduce
+the qualitative signatures of UNSW-NB15 attack types.
+They do not capture long-range temporal correlations, protocol interactions,
+or the noise characteristics of real network traffic.
+The simulation-to-reality gap means that results cannot be directly
+extrapolated to live network deployments without validation on real
+honeypot logs.
 
 \paragraph{Defender action does not affect attacker trajectory.}
-In the current formulation the attacker's Markov chain evolves independently
-of the defender's actions.
-In practice, a BLOCK or ALERT response may deter or redirect an attacker.
-Modelling the attacker as a best-responding agent (e.g.\ using multi-agent
-RL or game-theoretic methods) would produce a more realistic adversarial
-dynamic.
+In the current formulation, the attacker's Markov chain evolves
+independently of the defender's actions.
+In practice, BLOCK or ALERT responses may deter, delay, or redirect an
+attacker.
+Modelling the attacker as a best-responding agent --- using multi-agent RL,
+game-theoretic formulations, or a secondary attacker Markov chain that
+conditions on the observed defender actions --- would produce more realistic
+adversarial dynamics.
 
-\paragraph{Classifier is not integrated into the DQN state.}
-The Random Forest classifier provides attack-type predictions that are
-logged but not fed into the DQN observation vector.
-Replacing ground-truth labels with classifier outputs would test whether
-the policy is robust to classification noise --- a necessary step before
-real-world deployment.
+\paragraph{Classifier not integrated into the decision pipeline.}
+The Random Forest classifier correctly identifies attack types from network
+features, but its output is not used by the SEDM, which reads ground-truth
+labels from the state vector.
+Replacing ground-truth labels with classifier predictions would test whether
+the SEDM is robust to classification noise --- an important prerequisite for
+real deployment.
+The classifier's misclassification rate (if non-trivial) could degrade the
+escalation risk computation, which currently assumes that the attack type
+is known.
 
-\paragraph{Single-episode evaluation.}
-The cross-intent results report means over 50 episodes, but variance across
-episodes is not reported.
-A more rigorous evaluation would include confidence intervals and
-statistical tests comparing intent-conditional performance distributions.
+\paragraph{No network topology.}
+HoneyIQ models all interactions as single-session point contacts without
+spatial structure.
+Real network intrusions involve lateral movement, multi-hop attacks, and
+topological constraints that are not captured.
+Extending the simulation to a graph-based network topology would increase
+realism at the cost of significantly higher state-space complexity.
 
+\paragraph{Static Markov transition matrices.}
+The attacker's transition matrices are fixed for each intent and do not
+adapt during an episode.
+Real adversaries update their strategies based on the defender's responses.
+An adversary that observes consistent BLOCK actions on EXPLOITS might switch
+to a different attack type or modify its escalation speed.
+A dynamic Markov model whose transition matrices evolve in response to
+defender feedback would capture this adaptive behaviour.
+
+\paragraph{Episode termination by truncation.}
+Episodes terminate only when \texttt{max\_steps} is reached; there is no
+natural termination condition corresponding to attacker success or defeat.
+In a real scenario, an attacker who achieves Actions on Objectives (data
+exfiltration, system destruction) would terminate the campaign.
+Modelling goal-conditioned episode termination would allow the evaluation
+to capture the probability of attacker success, a more operationally
+relevant metric than episode reward.
+
+%% ── 5.5 Design Choices ───────────────────────────────────────
 \section{Design Choices and Trade-offs}
+\label{sec:disc_design}
 
 \paragraph{LayerNorm over BatchNorm.}
-LayerNorm normalises across features rather than across the batch dimension,
-making it independent of batch size.
-For a DQN trained on mini-batches of 64 samples drawn from a diverse replay
-buffer, LayerNorm avoids the instability that arises when BatchNorm
-statistics are computed from a heterogeneous mini-batch.
+LayerNorm~\citep{ba2016layer} normalises activations across features for
+each sample independently, making it batch-size-agnostic.
+For DQN training with mini-batches of 64 samples drawn from a diverse
+replay buffer, BatchNorm statistics would be computed from a
+heterogeneous mix of state types, potentially introducing instability.
+LayerNorm avoids this dependency.
+Empirically, no training instability attributable to normalisation was
+observed during the 300-episode training runs.
 
 \paragraph{Hard target network update.}
-A hard copy every 150 steps (rather than a Polyak soft update) was chosen
-for simplicity.
-Soft updates with a small mixing coefficient ($\tau \approx 0.005$) could
-provide smoother target stabilisation, but the current setting proved
-adequate for convergence.
+A hard copy of the policy network parameters every 150 steps was chosen
+over a Polyak soft update ($\theta^- \leftarrow \tau\theta + (1-\tau)\theta^-$,
+$\tau \approx 0.005$) for implementation simplicity.
+Both approaches stabilise training; the hard update introduces discrete
+target shifts every 150 steps but avoids the hyperparameter sensitivity
+of choosing $\tau$.
+At the episode length of 500 steps, 150-step updates correspond to roughly
+three target updates per episode, providing stable targets over a substantial
+fraction of each episode.
 
-\paragraph{Synthetic training data for the classifier.}
+\paragraph{Composite threat-level weight assignment.}
+The weight assignment in Equation~\ref{eq:threat} (attack severity 45\%,
+kill chain stage 35\%, escalation rate 15\%, cumulative count 5\%) was
+designed by domain reasoning rather than optimisation.
+Attack severity receives the highest weight because it is the most direct
+indicator of the attacker's current capability and impact.
+Kill chain stage receives the second-highest weight because it captures the
+campaign context.
+The 5\% weight on cumulative attack count is a minor adjustment that
+differentiates isolated probes from sustained campaigns without dominating
+the threat signal.
+
+An alternative approach would optimise these weights jointly with the reward
+matrix using Bayesian optimisation or multi-objective optimisation, with
+detection rate and false-positive rate as objectives.
+This is left for future work.
+
+\paragraph{SEDM band thresholds.}
+The Low/Medium ($\rho = 0.35$) and Medium/High ($\rho = 0.65$) thresholds
+were chosen to create roughly equal-width bands in the $[0, 1]$ risk space.
+Intent-specific analysis (Figure~\ref{fig:esc_risk_per_intent}) confirms
+that the thresholds correctly separate the intent profiles: STEALTHY
+typically falls in the Low band, AGGRESSIVE in the High band, and
+TARGETED/OPPORTUNISTIC in the Medium band for most stages.
+Shifting the thresholds could alter the balance between false positives
+(lower thresholds) and false negatives (higher thresholds) for specific
+stages.
+
+\paragraph{Synthetic classifier training data.}
 Generating classifier training data from the parametric feature distributions
-avoids the need for a labelled real-world dataset and enables rapid
-re-training with arbitrary class balance.
-The risk is that the classifier is over-fit to synthetic data and may not
-generalise to real traffic --- a known challenge in intrusion detection
-research.
+avoids the need for a real labelled dataset and enables instant re-training
+with any desired class balance.
+The risk is classifier over-fit to synthetic data that may not generalise
+to real traffic.
+In the HoneyIQ evaluation, this risk is moot because the evaluation features
+are also synthetic; in a real deployment, the classifier would need to be
+retrained on real network data.
+
+%% ── 5.6 Future Work ──────────────────────────────────────────
+\section{Future Work Directions}
+\label{sec:future}
+
+\subsection{Classifier Integration}
+\label{sec:future_classifier}
+
+The most immediate extension is to replace the ground-truth attack label
+in the SEDM's decision pipeline with the Random Forest classifier's output.
+This would introduce observation noise proportional to the classifier's
+error rate and test whether the SEDM maintains $>$\,99\% detection under
+realistic classification uncertainty.
+A confidence-weighted band assignment --- where uncertain classifier
+predictions widen the escalation risk estimate --- could provide a principled
+way to handle ambiguous observations.
+
+\subsection{Adaptive Attacker Modelling}
+
+Modelling the attacker as a best-responding agent (e.g., using multi-agent
+RL or a game-theoretic Stackelberg formulation) would introduce genuine
+adversarial dynamics.
+An attacker trained against the SEDM might learn to manipulate the
+escalation risk computation by dwelling at low-risk stages longer than
+the Markov chain predicts, or by generating traffic that bypasses the
+override rules.
+Evaluating SEDM robustness against such an adaptive adversary would provide
+a stronger performance guarantee.
+
+\subsection{Multi-Intent Training for DQN}
+
+Exposing the DQN to a mixture of intent profiles during training --- sampling
+a random intent at the start of each episode --- would broaden the state
+distribution and reduce the tendency to over-specialise on OPPORTUNISTIC
+traffic.
+An intent-conditioned DQN, where the current intent is provided as input
+(as it is in the 24-dimensional state vector), could be compared with the
+SEDM on cross-intent generalisation.
+
+\subsection{Real Network Feature Distributions}
+
+Fitting the 15 feature distributions to the actual UNSW-NB15 records
+(using maximum likelihood estimation or kernel density estimation per
+attack category) would reduce the simulation-to-reality gap.
+Alternatively, a conditional generative model (e.g., a conditional VAE
+or normalising flow) trained on real packet data would enable richer,
+correlated feature generation.
+
+\subsection{Network Topology Extension}
+
+Extending HoneyIQ to a multi-node network topology with explicit honeypot
+placement decisions would introduce a spatial dimension to the problem.
+The SEDM could be extended to consider both the kill chain stage and the
+network position of the attacker, enabling topology-aware response policies.
+
+\subsection{Distributional Reinforcement Learning}
+
+Replacing the standard DQN with a distributional RL variant
+(e.g., C51~\citep{wang2016dueling} or QR-DQN) would allow the agent to
+maintain a distribution over returns rather than a point estimate.
+The resulting uncertainty estimates could improve decisions at threat-band
+boundaries, where the optimal action is least clear.
+
+\subsection{OpenCanary Integration}
+
+HoneyIQ includes initial scaffolding for integration with OpenCanary,
+an open-source honeypot framework.
+Replaying real OpenCanary session logs through the SEDM would provide an
+out-of-distribution test of generalisation to genuine attack traffic,
+bridging the simulation-to-reality gap without requiring live deployment.

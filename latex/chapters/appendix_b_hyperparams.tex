@@ -1,64 +1,176 @@
 %% ============================================================
-%%  Appendix B — Full Hyperparameter Listing
+%%  Appendix B — Full Hyperparameter and Configuration Listing
 %% ============================================================
-\chapter{Full Hyperparameter Listing}
+\chapter{Full Hyperparameter and Configuration Listing}
 \label{app:hyperparams}
 
 Table~\ref{tab:full_hyperparams} lists every configurable parameter in
-HoneyIQ with its default value and the file in which it is defined.
+HoneyIQ with its default value, the file in which it is defined, and
+a brief rationale.
 
-\begin{longtable}{p{4.2cm}p{2.8cm}p{5.5cm}}
-  \caption{Complete HoneyIQ hyperparameter listing.}
+\begin{longtable}{p{3.8cm}p{2.6cm}p{3.5cm}p{3.2cm}}
+  \caption{Complete HoneyIQ parameter listing with rationale.}
   \label{tab:full_hyperparams} \\
   \toprule
-  Parameter & Default & Source / Notes \\
+  Parameter & Default & Source & Rationale \\
   \midrule
   \endfirsthead
-  \multicolumn{3}{c}{\tablename\ \thetable{} (continued)} \\
+  \multicolumn{4}{c}{\tablename\ \thetable{} (continued)} \\
   \toprule
-  Parameter & Default & Source / Notes \\
+  Parameter & Default & Source & Rationale \\
   \midrule
   \endhead
   \midrule
-  \multicolumn{3}{r}{\footnotesize Continued on next page} \\
+  \multicolumn{4}{r}{\footnotesize Continued on next page} \\
   \endfoot
   \bottomrule
   \endlastfoot
 
-  %% DQN
-  \multicolumn{3}{l}{\textit{DQN (defender/dqn.py)}} \\[2pt]
-  state\_dim         & 24          & Observation vector length \\
-  action\_dim        & 5           & HoneypotAction count \\
-  hidden\_layers     & [256,128,64] & FC network widths \\
-  learning\_rate     & $10^{-3}$   & Adam optimiser \\
-  gamma              & 0.99        & Discount factor \\
-  epsilon\_initial   & 1.0         & Start of exploration \\
-  epsilon\_min       & 0.05        & Floor for exploration \\
-  epsilon\_decay     & 0.997       & Per-step multiplicative decay \\
-  buffer\_capacity   & 15\,000     & Circular replay buffer size \\
-  batch\_size        & 64          & Mini-batch for gradient update \\
-  target\_update\_freq & 150 steps  & Hard copy of policy $\to$ target \\
-  grad\_clip\_norm   & 10.0        & Max $\ell_2$ norm for gradients \\
-  loss\_function     & SmoothL1    & Huber loss \\
-  weight\_init       & Kaiming uniform & He init for ReLU layers \\
-  normalisation      & LayerNorm   & Per-sample, per-feature \\[6pt]
+  %% DQN Architecture
+  \multicolumn{4}{l}{\textbf{DQN Network (\texttt{defender/dqn.py})}} \\[3pt]
+  state\_dim         & 24          & \texttt{dqn.py}       & Observation vector length \\
+  action\_dim        & 5           & \texttt{dqn.py}       & HoneypotAction count \\
+  hidden\_layers     & [256,128,64]& \texttt{dqn.py}       & Wide-to-narrow funnel \\
+  normalisation      & LayerNorm   & \texttt{dqn.py}       & Batch-size-agnostic \\
+  activation         & ReLU        & \texttt{dqn.py}       & Standard deep RL choice \\
+  weight\_init       & Kaiming uniform & \texttt{dqn.py}   & Preserves gradient variance \\[6pt]
+
+  %% DQN Training
+  \multicolumn{4}{l}{\textbf{DQN Training (\texttt{train.py})}} \\[3pt]
+  learning\_rate     & $10^{-3}$   & \texttt{train.py}    & Adam optimiser \\
+  gamma              & 0.99        & \texttt{train.py}    & Emphasises future rewards \\
+  epsilon\_initial   & 1.0         & \texttt{train.py}    & Full exploration at start \\
+  epsilon\_min       & 0.05        & \texttt{train.py}    & Retains 5\% exploration \\
+  epsilon\_decay     & 0.997       & \texttt{train.py}    & Exponential annealing \\
+  buffer\_capacity   & 15\,000     & \texttt{train.py}    & 30 episodes of 500 steps \\
+  batch\_size        & 64          & \texttt{train.py}    & Standard mini-batch \\
+  target\_update\_freq & 150 steps & \texttt{train.py}    & $\approx$3 updates/episode \\
+  grad\_clip\_norm   & 10.0        & \texttt{train.py}    & Prevents gradient explosion \\
+  loss\_function     & SmoothL1    & \texttt{train.py}    & Robust to outlier Q-errors \\
+  training\_episodes & 300         & \texttt{train.py}    & Plateau reached by ep.\ 50 \\
+  steps\_per\_episode & 500        & \texttt{train.py}    & Training episode length \\
+  training\_intent   & OPPORTUNISTIC & \texttt{train.py}  & Broadest state coverage \\[6pt]
+
+  %% SEDM
+  \multicolumn{4}{l}{\textbf{SEDM Policy (\texttt{defender/matrix\_policy.py})}} \\[3pt]
+  esc\_low\_threshold  & 0.35      & \texttt{matrix\_policy.py} & Low/Medium band boundary \\
+  esc\_high\_threshold & 0.65      & \texttt{matrix\_policy.py} & Medium/High band boundary \\
+  rate\_threshold      & 0.80      & \texttt{matrix\_policy.py} & R3 override trigger \\
+  high\_impact\_attacks & DOS, WORMS & \texttt{matrix\_policy.py} & R2 override trigger \\
+  default\_intent    & OPPORTUNISTIC & \texttt{matrix\_policy.py} & Fallback intent \\[6pt]
 
   %% Classifier
-  \multicolumn{3}{l}{\textit{Random Forest (defender/classifier.py)}} \\[2pt]
-  n\_estimators      & 100         & Number of trees \\
-  class\_weight      & balanced    & Handles class imbalance \\
-  scaler             & StandardScaler & Zero-mean, unit-variance \\
-  train\_samples\_per\_class & 600 & Synthetic training set size \\
-  eval\_seed         & 999         & Held-out evaluation seed \\[6pt]
+  \multicolumn{4}{l}{\textbf{Random Forest (\texttt{defender/classifier.py})}} \\[3pt]
+  n\_estimators      & 150         & \texttt{train.py}    & Ensemble size \\
+  max\_depth         & 20          & \texttt{train.py}    & Prevents overfitting \\
+  n\_jobs            & 1           & \texttt{train.py}    & Single-threaded \\
+  class\_weight      & balanced    & \texttt{classifier.py} & Handles class imbalance \\
+  scaler             & StandardScaler & \texttt{classifier.py} & Zero-mean, unit-variance \\
+  train\_samples/class & 600       & \texttt{train.py}    & 6\,000 total samples \\
+  eval\_samples/class  & 200       & \texttt{train.py}    & 2\,000 test samples \\
+  training\_seed     & 42          & \texttt{train.py}    & Reproducibility \\
+  eval\_seed         & 999         & \texttt{classifier.py} & Independent test set \\[6pt]
 
   %% Environment
-  \multicolumn{3}{l}{\textit{Environment (environment/env.py)}} \\[2pt]
-  max\_steps         & 500         & Episode truncation length \\
-  escalation\_window & 20 steps    & Sliding window for esc.\ rate \\
-  threat\_weights    & (0.45, 0.35, 0.15, 0.05) & See Eq.~(3.6) \\[6pt]
+  \multicolumn{4}{l}{\textbf{Environment (\texttt{environment/cyber\_env.py})}} \\[3pt]
+  train\_max\_steps    & 500       & \texttt{cyber\_env.py} & Training episode length \\
+  eval\_max\_steps     & 200       & \texttt{main.py}     & Evaluation episode length \\
+  escalation\_window   & 20 steps  & \texttt{cyber\_env.py} & Sliding window size \\
+  threat\_w\_severity  & 0.45      & \texttt{honeypot.py} & Dominant signal \\
+  threat\_w\_stage     & 0.35      & \texttt{honeypot.py} & Kill chain progress \\
+  threat\_w\_esc\_rate & 0.15      & \texttt{honeypot.py} & Campaign tempo \\
+  threat\_w\_count     & 0.05      & \texttt{honeypot.py} & Cumulative pressure \\
+  attack\_count\_norm  & 100       & \texttt{honeypot.py} & Saturation threshold \\[6pt]
+
+  %% Threat bands
+  \multicolumn{4}{l}{\textbf{Threat Bands (\texttt{defender/honeypot.py})}} \\[3pt]
+  benign threshold   & $< 0.15$    & \texttt{honeypot.py} & Very low severity \\
+  low threshold      & $0.15$--$0.35$ & \texttt{honeypot.py} & Reconnaissance-level \\
+  medium threshold   & $0.35$--$0.55$ & \texttt{honeypot.py} & Delivery-level \\
+  high threshold     & $0.55$--$0.75$ & \texttt{honeypot.py} & Exploitation-level \\
+  critical threshold & $\geq 0.75$ & \texttt{honeypot.py} & C2/AoO-level \\[6pt]
+
+  %% Evaluation
+  \multicolumn{4}{l}{\textbf{Evaluation (\texttt{main.py}, \texttt{evaluate.py})}} \\[3pt]
+  eval\_episodes     & 30          & \texttt{main.py}     & Per-intent episodes \\
+  eval\_steps        & 200         & \texttt{main.py}     & Steps per eval episode \\
+  random\_seed       & 42          & \texttt{main.py}     & Reproducibility \\
 
   %% Attacker
-  \multicolumn{3}{l}{\textit{Attacker (attacker/attacker.py)}} \\[2pt]
-  default\_intent    & OPPORTUNISTIC & Can be overridden via CLI \\
-  seed               & 42          & Numpy random seed \\
+  \multicolumn{4}{l}{\textbf{Attacker (\texttt{attacker/transition\_model.py})}} \\[3pt]
+  default\_intent    & OPPORTUNISTIC & \texttt{attacker.py} & Can be overridden \\
+  attacker\_seed     & 42          & \texttt{attacker.py} & Numpy random seed \\
+  kill\_chain\_floor & primary stage $-1$ & \texttt{attacker.py} & Prevents stage regression \\
 \end{longtable}
+
+\section{SEDM Matrix Values}
+
+Table~\ref{tab:sedm_full} lists the complete $7 \times 3$ Stage-Escalation
+Decision Matrix for reference.
+
+\begin{table}[ht]
+  \centering
+  \caption{Complete Stage-Escalation Decision Matrix.}
+  \label{tab:sedm_full}
+  \begin{tabular}{lp{2.2cm}p{2.2cm}p{2.2cm}}
+    \toprule
+    Kill Chain Stage & Low ($\rho < 0.35$) & Medium ($0.35 \leq \rho < 0.65$) & High ($\rho \geq 0.65$) \\
+    \midrule
+    RECONNAISSANCE   & ALLOW & LOG   & LOG   \\
+    WEAPONIZATION    & LOG   & LOG   & TROLL \\
+    DELIVERY         & LOG   & TROLL & TROLL \\
+    EXPLOITATION     & TROLL & BLOCK & BLOCK \\
+    INSTALLATION     & BLOCK & BLOCK & ALERT \\
+    COMMAND\_\&\_CTRL & BLOCK & ALERT & ALERT \\
+    ACTIONS\_ON\_OBJ & ALERT & ALERT & ALERT \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Override Rule Specifications}
+
+The three override rules are applied in order after the matrix lookup:
+
+\begin{enumerate}
+  \item \textbf{R1 (Normal traffic)}: If \texttt{AttackType} = NORMAL,
+        return ALLOW regardless of matrix result.
+        Priority: highest (always applied first).
+
+  \item \textbf{R2 (High-impact attacks)}: If \texttt{AttackType} $\in$
+        \{DOS, WORMS\} and R1 was not triggered, upgrade action by one
+        level in the sequence:
+        ALLOW $\to$ LOG $\to$ TROLL $\to$ BLOCK $\to$ ALERT.
+        Rationale: DOS and WORMS cause rapid, widespread damage requiring
+        an immediately escalated response.
+
+  \item \textbf{R3 (High attack rate)}: If escalation\_rate $> 0.80$ and
+        R1 and R2 were not triggered, upgrade action by one level.
+        Rationale: more than 80\% of the last 20 steps being attacks
+        indicates a sustained campaign warranting escalated containment.
+\end{enumerate}
+
+\section{Reward Matrix Values}
+
+Table~\ref{tab:reward_full} lists the complete $5 \times 5$ base reward matrix.
+
+\begin{table}[ht]
+  \centering
+  \caption{Complete base reward matrix (action $\times$ threat band).}
+  \label{tab:reward_full}
+  \begin{tabular}{lccccc}
+    \toprule
+    Action & Benign ($<$0.15) & Low (0.15--0.35) & Medium (0.35--0.55) & High (0.55--0.75) & Critical ($\geq$0.75) \\
+    \midrule
+    ALLOW & $+1.0$ & $+0.5$ & $-1.0$ & $-3.0$ & $-6.0$ \\
+    LOG   & $+0.2$ & $+1.5$ & $+2.0$ & $+1.0$ & $-1.0$ \\
+    TROLL & $-1.0$ & $+1.0$ & $+3.0$ & $+2.5$ & $+0.5$ \\
+    BLOCK & $-2.0$ & $-0.5$ & $+1.5$ & $+3.5$ & $+5.0$ \\
+    ALERT & $-3.0$ & $-1.0$ & $+0.5$ & $+2.0$ & $+6.0$ \\
+    \bottomrule
+  \end{tabular}
+  \par\smallskip
+  \footnotesize Additional modifiers: late-stage amplifier ($1.5\times$ for negative rewards at
+  stages $\geq 4$); TROLL + BACKDOORS/SHELLCODE/WORMS ($+0.8$);
+  BLOCK + WORMS ($+1.0$); LOG + RECONNAISSANCE ($+0.5$);
+  ALLOW + non-attack ($+0.5$).
+\end{table}

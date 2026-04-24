@@ -2,11 +2,12 @@
 
 ## Overview
 
-The defender subsystem has three layers:
+The defender subsystem has four layers:
 
 1. **Attack Classifier** (`classifier.py`) — Random Forest identifying attack types from raw network features
-2. **DQN Agent** (`dqn.py`) — Deep Q-Network selecting honeypot actions from the state vector
-3. **Defender Orchestrator** (`defender.py`) — combines both; handles inference, learning, and persistence
+2. **Stage-Escalation Decision Matrix** (`matrix_policy.py`) — primary deterministic policy mapping kill chain stage and escalation risk to honeypot actions
+3. **DQN Agent** (`dqn.py`) — Deep Q-Network baseline retained for comparison
+4. **Defender Orchestrator** (`defender.py`) — wraps classifier + DQN; handles inference, learning, and persistence
 
 The reward function and honeypot action definitions live in `honeypot.py`.
 
@@ -67,6 +68,87 @@ Base reward from `_REWARD_MATRIX[action][band]`:
 
 ---
 
+## `matrix_policy.py` — Stage-Escalation Decision Matrix (SEDM)
+
+The SEDM is the **primary decision policy** in HoneyIQ. It replaces stochastic RL with a deterministic, interpretable decision procedure grounded in the kill chain model.
+
+### Algorithm
+
+**Step 1 — Escalation risk**: Query the intent-specific Markov transition model for the probability of advancing to a strictly higher kill chain stage:
+
+```
+esc_risk = Σ P(next_stage = s') for all s' > current_stage
+```
+
+**Step 2 — Band classification**:
+- Low:    esc_risk < 0.35
+- Medium: 0.35 ≤ esc_risk < 0.65
+- High:   esc_risk ≥ 0.65
+
+**Step 3 — Matrix lookup** (7 stages × 3 bands → action):
+
+| Stage / Band | Low | Medium | High |
+|---|---|---|---|
+| RECONNAISSANCE | ALLOW | LOG | LOG |
+| WEAPONIZATION | LOG | LOG | TROLL |
+| DELIVERY | LOG | TROLL | TROLL |
+| EXPLOITATION | TROLL | BLOCK | BLOCK |
+| INSTALLATION | BLOCK | BLOCK | ALERT |
+| COMMAND_AND_CTRL | BLOCK | ALERT | ALERT |
+| ACTIONS_ON_OBJ | ALERT | ALERT | ALERT |
+
+**Step 4 — Override rules** (applied after matrix lookup):
+- **R1**: AttackType.NORMAL → always ALLOW
+- **R2**: AttackType ∈ {DOS, WORMS} → upgrade action one severity level
+- **R3**: escalation_rate > 0.80 → upgrade action one severity level
+
+Upgrade order: ALLOW → LOG → TROLL → BLOCK → ALERT
+
+**Step 5 — Composite risk score** (logged, does not affect action):
+
+```
+risk = 0.35 × stage_weight + 0.35 × escalation_risk
+     + 0.15 × attack_severity + 0.15 × escalation_rate
+```
+
+### Intent-awareness
+
+The SEDM uses the intent-specific TransitionModel to compute escalation risk. The same matrix applies across all intents, but the escalation risk values differ, so the SEDM naturally adapts to each attacker profile.
+
+### API
+
+```python
+policy = MatrixPolicy(default_intent=AttackerIntent.OPPORTUNISTIC)
+
+# From environment state vector:
+action, info = policy.decide_from_state(state)   # state: np.ndarray (24,)
+
+# From first principles:
+action, info = policy.decide(
+    current_stage=KillChainStage.EXPLOITATION,
+    current_attack=AttackType.EXPLOITS,
+    escalation_rate=0.7,
+    intent=AttackerIntent.AGGRESSIVE
+)
+
+# info dict contains:
+# stage, attack_type, intent, escalation_risk, escalation_band,
+# base_action, override_applied, final_action, composite_risk
+```
+
+### Evaluation Results
+
+Across 30 × 200-step evaluation episodes per intent:
+
+| Intent | Detection Rate | False Positive Rate | Mean Reward |
+|---|---|---|---|
+| STEALTHY | 99.09% | 35.56% | 1012.22 |
+| AGGRESSIVE | 99.47% | 6.67% | 1090.84 |
+| TARGETED | 99.48% | 3.33% | 1127.10 |
+| OPPORTUNISTIC | 99.41% | 15.00% | 896.05 |
+
+---
+
 ## `dqn.py`
 
 ### `DQNNetwork`
@@ -81,54 +163,15 @@ Input(state_dim=24)
   → Linear(64, action_dim=5)
 ```
 
-- **LayerNorm**: normalises activations per-sample (not per-batch), stable with small batch sizes
-- **Kaiming uniform** weight init preserves variance under ReLU
-- **No output activation**: Q-values are unbounded
-
-### `ReplayBuffer`
-
-Circular deque of `Transition` namedtuples `(state, action, reward, next_state, done)`.
-
-- Capacity: 15,000 transitions
-- Sampling: uniform random without replacement
-- Returns batches as stacked `torch.Tensor` objects on the correct device
-
 ### `DQNAgent`
 
-Main agent class. Owns:
-- `policy_net` — trained online
-- `target_net` — frozen copy updated every 150 steps
-- `replay_buffer`
-- `optimizer` (Adam)
-- `loss_fn` (SmoothL1 / Huber)
+Epsilon-greedy DQN with experience replay (15,000 capacity), target network (hard copy every 150 steps), Huber loss, Adam optimizer (lr=1e-3), gradient clipping (max_norm=10).
 
-#### `select_action(state, training=True) → int`
-
-```python
-if training and random() < epsilon:
-    return random_action()            # explore
-return argmax(policy_net(state))     # exploit
-```
-
-#### `update() → float | None`
-
-1. Return `None` if buffer has fewer than 64 transitions
-2. Sample mini-batch of 64
-3. Compute current Q-values: `Q(s, a; θ) = policy_net(s).gather(action)`
-4. Compute TD targets: `y = r + γ · max_{a'} Q(s', a'; θ⁻) · (1 - done)`
-5. Loss: `SmoothL1(Q(s,a), y)`
-6. Backprop with gradient clip (max norm 10.0)
-7. Decay epsilon: `ε ← max(ε_min, ε · 0.997)`
-8. Every 150 steps: `target_net ← policy_net` (hard copy)
-
-#### Persistence
-
-```python
-agent.save("models/dqn_agent.pt")   # saves state dicts + metadata
-agent.load("models/dqn_agent.pt")
-```
-
-Checkpoint keys: `policy_net`, `optimizer`, `epsilon`, `steps_done`, `state_dim`, `action_dim`, `gamma`, `epsilon_end`, `epsilon_decay`.
+Training dynamics (300 episodes, OPPORTUNISTIC intent, logs/metrics.csv):
+- Episode 0: detection rate 87.6%, reward 1006
+- Episode 1: detection rate 97.4%, reward 2051
+- Episodes 2–9: detection rate 98.0–99.2%, reward 2178–2317
+- Episodes 100+: detection rate consistently >98.5%, reward 2200–2360
 
 ---
 
@@ -136,46 +179,17 @@ Checkpoint keys: `policy_net`, `optimizer`, `epsilon`, `steps_done`, `state_dim`
 
 ### `AttackClassifier`
 
-Wraps `sklearn.ensemble.RandomForestClassifier` with:
-- `StandardScaler` for feature normalisation
-- Synthetic data generation via `Attacker._simulate_features()`
+Wraps `sklearn.ensemble.RandomForestClassifier`:
+- 150 estimators, max_depth=20
 - `class_weight="balanced"` for uniform class treatment
-
-#### Training
+- `StandardScaler` for feature normalisation
+- Trained on 600 synthetic samples per class (6,000 total)
 
 ```python
-clf = AttackClassifier(n_estimators=150, max_depth=20, n_jobs=1)
+clf = AttackClassifier(n_estimators=150, max_depth=20)
 clf.fit_from_simulation(n_samples_per_class=600, seed=42)
-# or manually:
-X, y = clf.generate_training_data(600, seed=42)
-clf.fit(X, y)
-```
-
-`generate_training_data` creates a balanced dataset: 600 samples × 10 classes = 6,000 rows.
-
-#### Inference
-
-```python
-attack_type  = clf.predict(features_dict)           # → AttackType
-proba        = clf.predict_proba(features_dict)     # → np.ndarray (10,)
-batch_labels = clf.predict_batch(X_df)              # → np.ndarray (N,)
-```
-
-`predict_proba` ensures all 10 classes are present in the output even if some were absent from the training split.
-
-#### Evaluation
-
-```python
+attack_type = clf.predict(features_dict)
 result = clf.evaluate(n_test_per_class=200, seed=999)
-# result["accuracy"]  → float
-# result["report"]    → sklearn classification report dict
-```
-
-#### Persistence
-
-```python
-clf.save("models/classifier.joblib")    # joblib dump of model + scaler + feature_names
-clf.load("models/classifier.joblib")
 ```
 
 ---
@@ -184,46 +198,12 @@ clf.load("models/classifier.joblib")
 
 ### `Defender`
 
-Top-level orchestrator holding one `DQNAgent` and one `AttackClassifier`.
-
-#### Initialisation
+Top-level orchestrator integrating classifier + DQN agent.
 
 ```python
-defender = Defender(
-    dqn_config={
-        "state_dim": 24, "action_dim": 5,
-        "lr": 1e-3, "gamma": 0.99,
-        "epsilon_start": 1.0, "epsilon_end": 0.05, "epsilon_decay": 0.997,
-        "batch_size": 64, "target_update_freq": 150, "buffer_capacity": 15_000,
-    },
-    classifier_config={"n_estimators": 150, "max_depth": 20, "n_jobs": 1},
-    train_classifier=True,
-    seed=42,
-)
-defender.initialize_classifier(n_samples_per_class=600)
-```
-
-#### `observe(state, features, training=True) → (action, predicted_attack)`
-
-1. `predicted_attack = classifier.predict(features)` (or NORMAL if unfitted)
-2. `action = dqn.select_action(state, training)`
-3. Returns both — the action is executed in the env; the prediction is for logging
-
-#### `learn(state, action, reward, next_state, done) → float | None`
-
-1. `replay_buffer.push(...)` via `dqn.store_transition`
-2. `dqn.update()` — returns loss or None
-
-#### `save(model_dir) / load(model_dir)`
-
-Saves/loads both components independently:
-- `{model_dir}/dqn_agent.pt`
-- `{model_dir}/classifier.joblib`
-
-#### Introspection
-
-```python
-defender.epsilon          # current exploration rate
-defender.steps_done       # total gradient steps
-defender.q_values(state)  # raw Q-values as np.ndarray (5,)
+defender = Defender(dqn_config={...}, classifier_config={...})
+action, pred = defender.observe(state, features, training=True)
+loss = defender.learn(state, action, reward, next_state, done)
+defender.save("models/")
+defender.load("models/")
 ```
