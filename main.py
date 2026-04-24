@@ -35,6 +35,7 @@ from attacker.transition_model import TransitionModel
 from attacker.attacker import Attacker
 from defender.defender import Defender
 from defender.honeypot import HoneypotAction, threat_band
+from defender.matrix_policy import MatrixPolicy
 from environment.cyber_env import CyberSecurityEnv
 from evaluation.metrics import MetricsCollector, StepRecord
 
@@ -52,17 +53,18 @@ def run_demo(
     log_dir:      str = "logs/",
 ) -> None:
     """
-    Load a trained defender and run one episode, printing step-by-step output.
+    Run one episode with the SEDM policy, printing step-by-step output.
     """
-    intent  = AttackerIntent[intent_name]
-    env     = CyberSecurityEnv(attacker_intent=intent, max_steps=n_steps)
-    defender = Defender()
+    intent   = AttackerIntent[intent_name]
+    env      = CyberSecurityEnv(attacker_intent=intent, max_steps=n_steps)
+    defender = Defender(default_intent=intent)
 
-    # Try to load; fall back to an untrained model if not found
-    if os.path.exists(os.path.join(model_dir, "dqn_agent.pt")):
+    # Load classifier if available; SEDM needs no DQN checkpoint
+    clf_path = os.path.join(model_dir, "classifier.joblib")
+    if os.path.exists(clf_path):
         defender.load(model_dir)
     else:
-        print("[Demo] No saved model found — using untrained defender.")
+        print("[Demo] No classifier found — initializing fresh classifier.")
         defender.initialize_classifier()
 
     step_records: list[StepRecord] = []
@@ -169,22 +171,19 @@ def run_compare(
     log_dir:    str = "logs/",
 ) -> None:
     """
-    Evaluate the trained policy against all 4 attacker intents.
+    Evaluate the SEDM policy against all 4 attacker intents.
+    No DQN checkpoint required — the matrix policy is fully deterministic.
     """
-    if not os.path.exists(os.path.join(model_dir, "dqn_agent.pt")):
-        print("[Compare] No trained model found. Run 'python main.py train' first.")
-        return
-
     print(f"\n{'='*70}")
-    print(f"  HoneyIQ — Multi-Intent Policy Comparison")
+    print(f"  HoneyIQ SEDM — Multi-Intent Policy Comparison")
     print(f"  Episodes per intent: {n_episodes}  |  Steps per episode: {n_steps}")
     print(f"{'='*70}\n")
 
     results = {}
     for intent in AttackerIntent:
         env      = CyberSecurityEnv(attacker_intent=intent, max_steps=n_steps)
-        defender = Defender()
-        defender.load(model_dir)
+        defender = Defender(default_intent=intent)
+        defender.load(model_dir)  # loads classifier only
 
         ep_rewards = []
         ep_det     = []

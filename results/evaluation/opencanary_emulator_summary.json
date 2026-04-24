@@ -1,0 +1,88 @@
+{
+  "total_events": 24000,
+  "action_counts": {
+    "LOG": 153,
+    "BLOCK": 3155,
+    "ALERT": 20611,
+    "TROLL": 73,
+    "ALLOW": 8
+  },
+  "sessions": [
+    {
+      "src_ip": "10.0.0.1",
+      "known": true,
+      "action": "ALERT",
+      "blocked": true,
+      "trolled": true,
+      "logged": true,
+      "alerted": true,
+      "first_seen": "2026-04-24T02:12:50.175028+00:00",
+      "last_seen": "2026-04-24T02:13:19.290447+00:00",
+      "event_count": 6000,
+      "notes": [
+        "ALERT fired: 10.0.0.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.0.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.0.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.0.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.0.1 blocked + JSONL alert record written + webhook notification would be sent"
+      ]
+    },
+    {
+      "src_ip": "10.0.1.1",
+      "known": true,
+      "action": "ALERT",
+      "blocked": true,
+      "trolled": false,
+      "logged": true,
+      "alerted": true,
+      "first_seen": "2026-04-24T02:13:19.313188+00:00",
+      "last_seen": "2026-04-24T02:13:48.472271+00:00",
+      "event_count": 6000,
+      "notes": [
+        "ALERT fired: 10.0.1.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.1.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.1.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.1.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.1.1 blocked + JSONL alert record written + webhook notification would be sent"
+      ]
+    },
+    {
+      "src_ip": "10.0.2.1",
+      "known": true,
+      "action": "ALERT",
+      "blocked": true,
+      "trolled": true,
+      "logged": true,
+      "alerted": true,
+      "first_seen": "2026-04-24T02:13:48.494520+00:00",
+      "last_seen": "2026-04-24T02:14:17.549583+00:00",
+      "event_count": 6000,
+      "notes": [
+        "ALERT fired: 10.0.2.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.2.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.2.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.2.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.2.1 blocked + JSONL alert record written + webhook notification would be sent"
+      ]
+    },
+    {
+      "src_ip": "10.0.3.1",
+      "known": true,
+      "action": "ALERT",
+      "blocked": true,
+      "trolled": true,
+      "logged": true,
+      "alerted": true,
+      "first_seen": "2026-04-24T02:14:17.570978+00:00",
+      "last_seen": "2026-04-24T02:14:46.969487+00:00",
+      "event_count": 6000,
+      "notes": [
+        "ALERT fired: 10.0.3.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.3.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.3.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.3.1 blocked + JSONL alert record written + webhook notification would be sent",
+        "ALERT fired: 10.0.3.1 blocked + JSONL alert record written + webhook notification would be sent"
+      ]
+    }
+  ]
+}

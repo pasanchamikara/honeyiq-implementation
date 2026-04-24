@@ -1,9 +1,10 @@
 """
-DefenderAgent — orchestrates the attack classifier and DQN policy.
+DefenderAgent — orchestrates the attack classifier and the SEDM matrix policy.
 
-The classifier identifies attack types from raw network features.
-The DQN selects honeypot actions based on the environment state vector.
-Both components can be saved and reloaded independently.
+The classifier identifies attack types from raw network features (unchanged).
+The MatrixPolicy replaces the former DQN: it selects honeypot actions based
+on the current kill chain stage and escalation probability from the Markov
+chain transition model, without any learned parameters or training.
 """
 
 from __future__ import annotations
@@ -13,47 +14,49 @@ from typing import Optional
 
 import numpy as np
 
-from attacker.attack_types import AttackType
-from .dqn import DQNAgent
+from attacker.attack_types import AttackType, KillChainStage, AttackerIntent
 from .classifier import AttackClassifier
 from .honeypot import HoneypotAction
+from .matrix_policy import MatrixPolicy
 
 
 class Defender:
     """
     Top-level defender agent combining:
-    - An AttackClassifier (RandomForest) for identifying attack types
-      from raw network flow features.
-    - A DQNAgent that selects honeypot response actions from the
-      environment state vector.
+
+    - An AttackClassifier (RandomForest) for identifying attack types from
+      raw UNSW-NB15-style network flow features.
+    - A MatrixPolicy (SEDM) that selects honeypot response actions using the
+      kill chain stage and Markov-chain escalation probability — no training
+      required.
 
     Parameters
     ----------
-    dqn_config : dict | None
-        Keyword arguments forwarded to DQNAgent.__init__.
     classifier_config : dict | None
         Keyword arguments forwarded to AttackClassifier.__init__.
     train_classifier : bool
-        If True, auto-generate training data and fit the classifier
-        when initialize_classifier() is called.
+        If True, auto-generate training data and fit the classifier when
+        initialize_classifier() is called.
     seed : int
         Random seed shared across components.
+    default_intent : AttackerIntent
+        Fallback intent for the MatrixPolicy when none is decodable from state.
     """
 
     def __init__(
         self,
-        dqn_config:        Optional[dict] = None,
         classifier_config: Optional[dict] = None,
         train_classifier:  bool = True,
         seed:              int  = 42,
+        default_intent:    AttackerIntent = AttackerIntent.OPPORTUNISTIC,
+        # Legacy parameter — accepted but ignored (no DQN config needed)
+        dqn_config:        Optional[dict] = None,
     ) -> None:
-        dqn_cfg = dqn_config or {}
         clf_cfg = classifier_config or {}
 
-        self.dqn_agent  = DQNAgent(**dqn_cfg)
-        self.classifier = AttackClassifier(**clf_cfg)
-        self._train_classifier = train_classifier
-        self._seed = seed
+        self.classifier    = AttackClassifier(**clf_cfg)
+        self.matrix_policy = MatrixPolicy(default_intent=default_intent)
+        self._seed         = seed
 
     # ------------------------------------------------------------------
     # Initialization
@@ -83,25 +86,30 @@ class Defender:
         self,
         state:    np.ndarray,
         features: dict[str, float],
-        training: bool = True,
+        training: bool = True,  # ignored — SEDM is deterministic
     ) -> tuple[int, AttackType]:
         """
         Given the current environment state vector and raw network features:
+
         1. Classify the features to obtain a predicted attack type.
-        2. Select a DQN action using epsilon-greedy (training) or greedy.
+        2. Decode kill chain stage, escalation rate, and inferred intent from
+           the state vector.
+        3. Query the MatrixPolicy for the optimal honeypot action.
 
         Returns
         -------
-        action : int  (HoneypotAction value)
+        action           : int  (HoneypotAction value)
         predicted_attack : AttackType
         """
+        # -- Attack type classification from network features --------------
         if self.classifier.is_fitted:
             predicted_attack = self.classifier.predict(features)
         else:
             predicted_attack = AttackType.NORMAL
 
-        action = self.dqn_agent.select_action(state, training=training)
-        return action, predicted_attack
+        # -- Action selection from SEDM ------------------------------------
+        action, _info = self.matrix_policy.decide_from_state(state)
+        return int(action), predicted_attack
 
     def get_attack_probabilities(
         self, features: dict[str, float]
@@ -111,8 +119,27 @@ class Defender:
             return np.ones(AttackType.count()) / AttackType.count()
         return self.classifier.predict_proba(features)
 
+    def get_decision_info(
+        self,
+        state:    np.ndarray,
+        features: dict[str, float],
+    ) -> dict:
+        """
+        Return the full SEDM decision breakdown for a given state.
+
+        Useful for explainability, logging, and thesis analysis.
+        """
+        if self.classifier.is_fitted:
+            predicted_attack = self.classifier.predict(features)
+        else:
+            predicted_attack = AttackType.NORMAL
+
+        action, info = self.matrix_policy.decide_from_state(state)
+        info["predicted_attack"] = predicted_attack.name
+        return info
+
     # ------------------------------------------------------------------
-    # Learning
+    # Learning — no-op (SEDM has no trainable parameters)
     # ------------------------------------------------------------------
 
     def learn(
@@ -124,33 +151,23 @@ class Defender:
         done:       bool,
     ) -> Optional[float]:
         """
-        Store the transition in the replay buffer and trigger a DQN update.
+        No-op — the MatrixPolicy requires no gradient updates.
 
-        Returns the training loss, or None if the buffer is not yet warm.
+        Returns None (compatible with code that checks for a loss value).
         """
-        self.dqn_agent.store_transition(state, action, reward, next_state, done)
-        return self.dqn_agent.update()
+        return None
 
     # ------------------------------------------------------------------
-    # Persistence
+    # Persistence — classifier only (policy has no weights)
     # ------------------------------------------------------------------
 
     def save(self, model_dir: str = "models/") -> None:
         os.makedirs(model_dir, exist_ok=True)
-        self.dqn_agent.save(os.path.join(model_dir, "dqn_agent.pt"))
         self.classifier.save(os.path.join(model_dir, "classifier.joblib"))
-        print(f"[Defender] Models saved to {model_dir}")
+        print(f"[Defender] Classifier saved to {model_dir}")
 
     def load(self, model_dir: str = "models/") -> None:
-        dqn_path = os.path.join(model_dir, "dqn_agent.pt")
         clf_path = os.path.join(model_dir, "classifier.joblib")
-
-        if os.path.exists(dqn_path):
-            self.dqn_agent.load(dqn_path)
-            print(f"[Defender] DQN loaded from {dqn_path}")
-        else:
-            print(f"[Defender] Warning: DQN checkpoint not found at {dqn_path}")
-
         if os.path.exists(clf_path):
             self.classifier.load(clf_path)
             print(f"[Defender] Classifier loaded from {clf_path}")
@@ -163,17 +180,14 @@ class Defender:
 
     @property
     def epsilon(self) -> float:
-        return self.dqn_agent.epsilon
+        """Stub property — SEDM has no exploration parameter."""
+        return 0.0
 
     @property
     def steps_done(self) -> int:
-        return self.dqn_agent.steps_done
+        """Stub property — SEDM does not count gradient steps."""
+        return 0
 
-    def q_values(self, state: np.ndarray) -> np.ndarray:
-        """Return raw Q-values for all actions given a state (numpy array)."""
-        import torch
-        state_t = torch.tensor(state, dtype=torch.float32,
-                               device=self.dqn_agent.device).unsqueeze(0)
-        with torch.no_grad():
-            q = self.dqn_agent.policy_net(state_t)
-        return q.squeeze(0).cpu().numpy()
+    def policy_matrix(self) -> list[list[str]]:
+        """Return the underlying SEDM as a list-of-lists of action names."""
+        return MatrixPolicy.get_matrix()
