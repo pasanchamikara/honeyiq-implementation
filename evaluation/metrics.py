@@ -371,8 +371,9 @@ class MetricsCollector:
         fig, axes = plt.subplots(4, 1, figsize=(14, 12), sharex=True)
         fig.suptitle("Episode Progression — Attacker vs Defender", fontsize=13, fontweight="bold")
 
-        cmap_atk = plt.cm.get_cmap("tab10", AttackType.count())
-        cmap_act = plt.cm.get_cmap("Set1", HoneypotAction.count())
+        import matplotlib
+        cmap_atk = matplotlib.colormaps["tab10"].resampled(AttackType.count())
+        cmap_act = matplotlib.colormaps["Set1"].resampled(HoneypotAction.count())
 
         # Threat level
         ax = axes[0]

@@ -18,7 +18,21 @@
       "Bash(python3:*)",
       "Bash(ls:*)",
       "Bash(wc -l /home/caesar/honeyiq-implementation/latex/chapters/*.tex)",
-      "Bash(wc -w /home/caesar/honeyiq-implementation/latex/chapters/*.tex)"
+      "Bash(wc -w /home/caesar/honeyiq-implementation/latex/chapters/*.tex)",
+      "Bash(grep:*)",
+      "Bash(mkdir -p /home/caesar/honeyiq-implementation/Thesis___HoneyIQ/chapters)",
+      "Bash(cp /home/caesar/honeyiq-implementation/latex/chapters/01_introduction.tex /home/caesar/honeyiq-implementation/Thesis___HoneyIQ/chapters/)",
+      "Bash(cp /home/caesar/honeyiq-implementation/latex/chapters/02_background.tex /home/caesar/honeyiq-implementation/Thesis___HoneyIQ/chapters/)",
+      "Bash(cp /home/caesar/honeyiq-implementation/latex/chapters/03_methodology.tex /home/caesar/honeyiq-implementation/Thesis___HoneyIQ/chapters/)",
+      "Bash(cp /home/caesar/honeyiq-implementation/latex/chapters/04_results.tex /home/caesar/honeyiq-implementation/Thesis___HoneyIQ/chapters/)",
+      "Bash(mkdir -p /home/caesar/honeyiq-implementation/Thesis___HoneyIQ/figures)",
+      "Bash(cp /home/caesar/honeyiq-implementation/latex/figures/*.png /home/caesar/honeyiq-implementation/Thesis___HoneyIQ/figures/)",
+      "Bash(python -m pytest)",
+      "Bash(python evaluate.py)",
+      "Bash(python *)",
+      "Bash(jobs)",
+      "Bash(mkdir *)",
+      "Bash(venv/bin/python *)"
     ]
   }
 }

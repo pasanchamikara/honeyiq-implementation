@@ -8,7 +8,7 @@ import logging
 import sys, os
 from collections import deque
 from dataclasses import dataclass, field
-from datetime import datetime, timedelta
+from datetime import datetime, timedelta, timezone
 from typing import Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
@@ -66,7 +66,7 @@ class SessionTracker:
         if is_attack:
             session.attack_count += 1
         session.event_count += 1
-        session.last_seen = datetime.utcnow()
+        session.last_seen = datetime.now(timezone.utc)
         return session
 
     def get(self, src_ip: str) -> Optional[SessionState]:
@@ -81,7 +81,7 @@ class SessionTracker:
         return dict(self._sessions)
 
     def _expire_old_sessions(self) -> None:
-        cutoff  = datetime.utcnow() - self._ttl
+        cutoff  = datetime.now(timezone.utc) - self._ttl
         expired = [ip for ip, s in self._sessions.items() if s.last_seen < cutoff]
         for ip in expired:
             del self._sessions[ip]

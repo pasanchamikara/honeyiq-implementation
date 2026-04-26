@@ -62,6 +62,7 @@ class CyberSecurityEnv(gym.Env):
         escalation_window:  int = 20,
         seed:               Optional[int] = None,
         render_mode:        Optional[str] = None,
+        benign_ratio:       float = 0.0,
     ) -> None:
         super().__init__()
 
@@ -70,6 +71,7 @@ class CyberSecurityEnv(gym.Env):
         self.escalation_window = escalation_window
         self.render_mode       = render_mode
         self._seed             = seed
+        self.benign_ratio      = float(np.clip(benign_ratio, 0.0, 1.0))
 
         # Spaces
         self.observation_space = spaces.Box(
@@ -135,13 +137,23 @@ class CyberSecurityEnv(gym.Env):
 
         self._step_count += 1
 
-        # Attacker advances
+        # Attacker advances (always, to maintain kill-chain continuity)
         atk_info = self._attacker.step()
 
-        attack_type      = atk_info["attack_type"]
-        kill_chain_stage = atk_info["kill_chain_stage"]
-        is_attack        = atk_info["is_attack"]
-        features         = atk_info["features"]
+        # Benign traffic injection: with probability benign_ratio, override
+        # this step with NORMAL-class traffic while preserving the attacker's
+        # kill-chain position in the state vector.  Simulates legitimate users
+        # occasionally contacting the honeypot alongside the actual campaign.
+        if self.benign_ratio > 0.0 and self.np_random.random() < self.benign_ratio:
+            attack_type      = AttackType.NORMAL
+            kill_chain_stage = atk_info["kill_chain_stage"]  # preserve stage
+            is_attack        = False
+            features         = self._attacker._simulate_features(AttackType.NORMAL)
+        else:
+            attack_type      = atk_info["attack_type"]
+            kill_chain_stage = atk_info["kill_chain_stage"]
+            is_attack        = atk_info["is_attack"]
+            features         = atk_info["features"]
 
         # Update sliding window for escalation rate
         self._recent_attacks.append(int(is_attack))

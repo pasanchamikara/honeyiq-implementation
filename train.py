@@ -159,7 +159,7 @@ def train(
         print(f"\n{'='*60}")
         print(f"HoneyIQ Training — Intent: {intent.name}")
         print(f"Episodes: {n_episodes}  |  Steps/ep: {max_steps}")
-        print(f"Device: {defender.dqn_agent.device}")
+        print(f"Policy: SEDM (deterministic, no training required)")
         print(f"{'='*60}\n")
 
     start_time = time.time()

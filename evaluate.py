@@ -263,12 +263,13 @@ def plot_effective_policy_per_intent(out_dir: str) -> None:
 # ---------------------------------------------------------------------------
 
 def evaluate_intent(
-    intent:     AttackerIntent,
-    n_episodes: int,
-    n_steps:    int,
-    seed:       int,
-    out_dir:    str,
-    honeypot:   DummyHoneypot,
+    intent:       AttackerIntent,
+    n_episodes:   int,
+    n_steps:      int,
+    seed:         int,
+    out_dir:      str,
+    honeypot:     DummyHoneypot,
+    benign_ratio: float = 0.0,
 ) -> IntentResult:
     """
     Run `n_episodes` greedy evaluation episodes for one attacker intent.
@@ -276,7 +277,8 @@ def evaluate_intent(
     Actions are forwarded to the DummyHoneypot emulator.
     """
     result   = IntentResult(intent=intent.name)
-    env      = CyberSecurityEnv(attacker_intent=intent, max_steps=n_steps, seed=seed)
+    env      = CyberSecurityEnv(attacker_intent=intent, max_steps=n_steps,
+                                seed=seed, benign_ratio=benign_ratio)
     defender = Defender(
         train_classifier=False,
         default_intent=intent,
@@ -286,22 +288,47 @@ def evaluate_intent(
 
     fake_ip = f"10.{list(AttackerIntent).index(intent)}.0.1"
     mp      = MatrixPolicy(default_intent=intent)
+    metrics = MetricsCollector(log_dir=out_dir)
 
     for ep_idx in range(n_episodes):
-        metrics  = MetricsCollector(log_dir=out_dir)
         ep_seed  = seed + ep_idx * 13
         state, info = env.reset(seed=ep_seed)
 
         for step in range(n_steps):
             features = info.get("features", {})
-            action_int, pred_attack = defender.observe(state, features, training=False)
 
-            # Capture SEDM decision detail for this step
-            action_obj, sedm_info = mp.decide_from_state(state)
+            # ── Ground truth for THIS step (no lag) ─────────────────────────
+            # state[0:10] encodes the attack type that drove this observation.
+            # This is the correct label to score the action against.
+            true_attack_type = AttackType(int(np.argmax(state[0:10])))
+            state_is_attack  = true_attack_type != AttackType.NORMAL
+
+            # ── Classifier-in-loop: SEDM acts on noisy predicted attack type ─
+            # The RF classifier predicts attack type from raw network features.
+            # We replace the ground-truth one-hot in the state with the
+            # classifier's prediction before passing to the SEDM.  This breaks
+            # the tautology where SEDM's R1 rule and the is_attack metric share
+            # the same ground-truth input, producing meaningful FP/FN values.
+            if features and defender.classifier.is_fitted:
+                pred_attack = defender.classifier.predict(features)
+            else:
+                pred_attack = true_attack_type   # fallback: no features yet
+
+            clf_state = state.copy()
+            clf_state[0:10] = 0.0
+            clf_state[int(pred_attack)] = 1.0
+
+            # SEDM decision based on classifier-predicted attack type
+            action_obj, sedm_info = mp.decide_from_state(clf_state)
+            action_int = int(action_obj)
             result.risk_scores.append(sedm_info["composite_risk"])
 
             next_state, reward, terminated, truncated, info = env.step(action_int)
-            metrics.record_step(ep_idx, step, action_int, reward, info, pred_attack, None)
+
+            # Score against true ground truth (state_is_attack), not classifier
+            aligned_info = dict(info)
+            aligned_info["is_attack"] = state_is_attack
+            metrics.record_step(ep_idx, step, action_int, reward, aligned_info, pred_attack, None)
 
             attack_name = AttackType(int(info["attack_type"])).name
             stage_name  = KillChainStage(int(info["kill_chain_stage"])).name
@@ -537,10 +564,11 @@ def save_sedm_table(out_dir: str) -> None:
 # ---------------------------------------------------------------------------
 
 def evaluate(
-    n_episodes:    int = 30,
-    n_steps:       int = 200,
-    seed:          int = 42,
-    out_dir:       str = RESULTS_DIR,
+    n_episodes:    int   = 30,
+    n_steps:       int   = 200,
+    seed:          int   = 42,
+    out_dir:       str   = RESULTS_DIR,
+    benign_ratio:  float = 0.0,
 ) -> Dict[str, IntentResult]:
 
     os.makedirs(out_dir, exist_ok=True)
@@ -554,18 +582,20 @@ def evaluate(
     print(f"  Episodes per intent : {n_episodes}")
     print(f"  Steps per episode   : {n_steps}")
     print(f"  Seed                : {seed}")
+    print(f"  Benign ratio        : {benign_ratio:.0%}")
     print(f"  Output directory    : {out_dir}")
     print(f"{'='*65}\n")
 
     for intent in AttackerIntent:
         print(f"[Eval] Evaluating {intent.name} ({n_episodes} episodes)...")
         res = evaluate_intent(
-            intent     = intent,
-            n_episodes = n_episodes,
-            n_steps    = n_steps,
-            seed       = seed,
-            out_dir    = out_dir,
-            honeypot   = honeypot,
+            intent        = intent,
+            n_episodes    = n_episodes,
+            n_steps       = n_steps,
+            seed          = seed,
+            out_dir       = out_dir,
+            honeypot      = honeypot,
+            benign_ratio  = benign_ratio,
         )
         results[intent.name] = res
         print(f"  Reward={res.mean_reward:+.2f}±{res.std_reward:.2f}  "
@@ -603,18 +633,21 @@ def _parse_args() -> argparse.Namespace:
     p = argparse.ArgumentParser(
         description="HoneyIQ SEDM — comprehensive evaluation"
     )
-    p.add_argument("--episodes", type=int, default=30)
-    p.add_argument("--steps",    type=int, default=200)
-    p.add_argument("--seed",     type=int, default=42)
-    p.add_argument("--out-dir",  type=str, default=RESULTS_DIR)
+    p.add_argument("--episodes",      type=int,   default=30)
+    p.add_argument("--steps",         type=int,   default=200)
+    p.add_argument("--seed",          type=int,   default=42)
+    p.add_argument("--out-dir",       type=str,   default=RESULTS_DIR)
+    p.add_argument("--benign-ratio",  type=float, default=0.0,
+                   help="Fraction of steps injected as benign NORMAL traffic (0–1).")
     return p.parse_args()
 
 
 if __name__ == "__main__":
     args = _parse_args()
     evaluate(
-        n_episodes = args.episodes,
-        n_steps    = args.steps,
-        seed       = args.seed,
-        out_dir    = args.out_dir,
+        n_episodes   = args.episodes,
+        n_steps      = args.steps,
+        seed         = args.seed,
+        out_dir      = args.out_dir,
+        benign_ratio = args.benign_ratio,
     )
