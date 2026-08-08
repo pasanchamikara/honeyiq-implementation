@@ -17,7 +17,12 @@ from sklearn.preprocessing import StandardScaler
 from sklearn.metrics import classification_report, accuracy_score
 from sklearn.model_selection import train_test_split
 
-from attacker.attack_types import AttackType, FEATURE_NAMES
+from attacker.attack_types import (
+    AttackType,
+    FEATURE_NAMES,
+    INTENSITY_LOGNORMAL_SIGMA,
+    NORMAL_PERSONA_WEIGHTS,
+)
 from attacker.attacker import Attacker
 
 
@@ -82,13 +87,27 @@ class AttackClassifier:
         """
         rows  = []
         labels = []
+        persona_names = list(NORMAL_PERSONA_WEIGHTS.keys())
+        persona_probs = list(NORMAL_PERSONA_WEIGHTS.values())
 
         for attack_type in AttackType:
             attacker = Attacker(seed=seed + int(attack_type))
+            # Draw a fresh intensity/persona per sample instead of relying on
+            # the attacker's own session profile — otherwise every sample of
+            # this class would share one intensity/persona, understating the
+            # real feature variance the classifier needs to learn from.
+            sample_rng = np.random.default_rng(seed + int(attack_type) + 1000)
             # Force the attacker to produce the desired attack type by
             # directly calling the feature simulator
             for _ in range(n_samples_per_class):
-                features = attacker._simulate_features(attack_type)
+                intensity = float(sample_rng.lognormal(0.0, INTENSITY_LOGNORMAL_SIGMA))
+                persona = (
+                    str(sample_rng.choice(persona_names, p=persona_probs))
+                    if attack_type == AttackType.NORMAL else None
+                )
+                features = attacker._simulate_features(
+                    attack_type, intensity=intensity, persona=persona
+                )
                 rows.append(features)
                 labels.append(int(attack_type))
 

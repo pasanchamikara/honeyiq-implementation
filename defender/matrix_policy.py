@@ -24,6 +24,7 @@ from attacker.attack_types import (
     KILL_CHAIN_WEIGHT,
 )
 from attacker.transition_model import TransitionModel
+from defender.adaptive_thresholds import AdaptiveThresholds
 from defender.honeypot import HoneypotAction
 
 log = logging.getLogger(__name__)
@@ -34,7 +35,16 @@ log = logging.getLogger(__name__)
 
 ESC_LOW_THRESHOLD  = 0.35   # escalation_risk < this  → LOW band
 ESC_HIGH_THRESHOLD = 0.65   # escalation_risk ≥ this  → HIGH band
-RATE_THRESHOLD     = 0.80   # escalation_rate > this  → override trigger
+RATE_THRESHOLD     = 0.80   # escalation_rate > this  → override trigger (R3)
+REPUTATION_THRESHOLD = 0.60 # cross-session reputation ≥ this → override trigger (R4)
+
+# NOTE: ESC_LOW_THRESHOLD/ESC_HIGH_THRESHOLD are deliberately NOT adaptive.
+# esc_risk comes purely from the static, hand-authored Markov TransitionModel
+# — there is no live observational signal in this codebase whose drift would
+# indicate those two band cuts are miscalibrated. RATE_THRESHOLD is different
+# (it gates on escalation_rate, a real function of observed traffic) and can
+# optionally be tuned by AdaptiveThresholds — see that module's docstring for
+# what it does and does not claim to do.
 
 # ---------------------------------------------------------------------------
 # Decision matrix
@@ -78,16 +88,22 @@ class MatrixPolicy:
     def __init__(
         self,
         default_intent: AttackerIntent = AttackerIntent.OPPORTUNISTIC,
+        adaptive_thresholds: Optional[AdaptiveThresholds] = None,
     ) -> None:
         self._default_intent = default_intent
         # Cache one TransitionModel per intent to avoid repeated construction
         self._tm_cache: Dict[AttackerIntent, TransitionModel] = {}
+        # None (default) = static RATE_THRESHOLD, identical to today's
+        # behavior. See AdaptiveThresholds' docstring for what it does.
+        self._adaptive = adaptive_thresholds
 
     # ------------------------------------------------------------------
     # Core decision interface
     # ------------------------------------------------------------------
 
-    def decide_from_state(self, state: np.ndarray) -> tuple[HoneypotAction, dict]:
+    def decide_from_state(
+        self, state: np.ndarray, reputation: float = 0.0
+    ) -> tuple[HoneypotAction, dict]:
         """
         Select a honeypot action directly from the 24-dim environment state.
 
@@ -101,6 +117,12 @@ class MatrixPolicy:
               [18]     attack_count_normalized
               [19]     escalation_rate
               [20:24]  attacker_intent one-hot
+        reputation : float
+            Cross-session, time-decayed offense score for this source IP
+            in [0, 1] (see opencanary_integration/engine/reputation.py).
+            Not part of the state vector — no persistent IP identity exists
+            in CyberSecurityEnv, so this is an out-of-band, live-pipeline-only
+            signal, defaulting to 0.0 (today's exact behavior) elsewhere.
 
         Returns
         -------
@@ -112,7 +134,10 @@ class MatrixPolicy:
         escalation_rate  = float(state[19])
         intent           = AttackerIntent(int(np.argmax(state[20:24])))
 
-        return self.decide(current_stage, current_attack, escalation_rate, intent)
+        return self.decide(
+            current_stage, current_attack, escalation_rate, intent,
+            reputation=reputation,
+        )
 
     def decide(
         self,
@@ -120,6 +145,7 @@ class MatrixPolicy:
         current_attack:  AttackType,
         escalation_rate: float,
         intent:          Optional[AttackerIntent] = None,
+        reputation:      float = 0.0,
     ) -> tuple[HoneypotAction, dict]:
         """
         Select a honeypot action from first principles.
@@ -130,6 +156,8 @@ class MatrixPolicy:
         current_attack   : observed attack type
         escalation_rate  : fraction of recent steps that were attacks [0, 1]
         intent           : inferred attacker intent (affects transition probs)
+        reputation       : cross-session offense score for this source IP
+                            [0, 1]; defaults to 0.0 (R4 never fires)
 
         Returns
         -------
@@ -143,7 +171,7 @@ class MatrixPolicy:
         band = self._escalation_band(esc_risk)
         base_action = _SEDM[int(current_stage)][band]
         action, override_applied = self._apply_overrides(
-            base_action, current_attack, escalation_rate
+            base_action, current_attack, escalation_rate, reputation
         )
         # Logged for analysis only — does not affect the chosen action.
         composite_risk = self._composite_risk(
@@ -157,6 +185,7 @@ class MatrixPolicy:
             "escalation_risk":  round(esc_risk, 4),
             "escalation_band":  ["LOW", "MEDIUM", "HIGH"][band],
             "base_action":      base_action.name,
+            "reputation":       round(reputation, 4),
             "override_applied": override_applied,
             "final_action":     action.name,
             "composite_risk":   round(composite_risk, 4),
@@ -241,12 +270,27 @@ class MatrixPolicy:
         action:          HoneypotAction,
         current_attack:  AttackType,
         escalation_rate: float,
+        reputation:      float = 0.0,
     ) -> tuple[HoneypotAction, str]:
         """
         Apply override rules in sequence.
 
         Returns (final_action, label_of_first_override_triggered | "none").
         """
+        rate_threshold = self._adaptive.threshold if self._adaptive else RATE_THRESHOLD
+        # Evaluated before the short-circuits below so AdaptiveThresholds
+        # observes R3's counterfactual trigger rate on every decision, not a
+        # censored subset where R1/R2/R4 already preempted it.
+        r3_condition = escalation_rate > rate_threshold
+        if self._adaptive is not None:
+            self._adaptive.record(r3_condition)
+
+        # R4 — persistent, cross-session repeat offender (checked first: a
+        # flagged source IP stays escalated even on a benign-looking event,
+        # fail2ban-style "once flagged, stay flagged")
+        if reputation >= REPUTATION_THRESHOLD:
+            return self._upgrade(action), "R4_REPEAT_OFFENDER"
+
         # R1 — normal traffic always allowed
         if current_attack == AttackType.NORMAL:
             return HoneypotAction.ALLOW, "R1_NORMAL_ALLOW"
@@ -256,7 +300,7 @@ class MatrixPolicy:
             return self._upgrade(action), "R2_HIGH_IMPACT"
 
         # R3 — very high attack frequency in recent window
-        if escalation_rate > RATE_THRESHOLD:
+        if r3_condition:
             return self._upgrade(action), "R3_HIGH_RATE"
 
         return action, "none"

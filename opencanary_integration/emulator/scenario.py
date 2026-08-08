@@ -61,6 +61,8 @@ class EmulatorScenario:
         If set, every decision is written as a JSON line to this path.
     verbose : bool
         Print per-event action banners.
+    escalation_mode : str
+        "window" (default) or "ema" — see SessionTracker/build_state.
     """
 
     def __init__(
@@ -69,6 +71,7 @@ class EmulatorScenario:
         intent: str = "OPPORTUNISTIC",
         audit_file: Optional[str] = None,
         verbose: bool = True,
+        escalation_mode: str = "window",
     ) -> None:
         self.generator = OpenCanaryEventGenerator(seed=42)
         self.honeypot  = DummyHoneypot(audit_file=audit_file, verbose=verbose)
@@ -81,6 +84,7 @@ class EmulatorScenario:
         self.policy = PolicyEngine(model_dir=model_dir, default_intent=intent)
 
         self._verbose = verbose
+        self._escalation_mode = escalation_mode
 
     # ------------------------------------------------------------------
     # Public API
@@ -94,10 +98,10 @@ class EmulatorScenario:
         """
         attack_type = map_logtype(event)
         session     = self.session_tracker.update(event.src_host, attack_type)
-        state       = build_state(session)
+        state       = build_state(session, escalation_mode=self._escalation_mode)
         threat_level = float(state[17])
 
-        action, _ = self.policy.decide(state)
+        action, _ = self.policy.decide(state, reputation=session.reputation)
 
         stage_probs_arr = self.predictor.next_stage_probs(session.current_stage)
         attack_probs = self.predictor.next_attack_probs(session.current_attack).tolist()
@@ -113,6 +117,7 @@ class EmulatorScenario:
             "stage":           session.current_stage.name,
             "threat_level":    round(threat_level, 4),
             "escalation_risk": round(esc_risk, 4),
+            "reputation":      round(session.reputation, 4),
             "action":          action.name,
             "stage_probs":     [round(p, 4) for p in stage_probs],
             "attack_probs":    [round(p, 4) for p in attack_probs],

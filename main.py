@@ -30,7 +30,13 @@ matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import seaborn as sns
 
-from attacker.attack_types import AttackType, KillChainStage, AttackerIntent
+from attacker.attack_types import (
+    AttackType,
+    KillChainStage,
+    AttackerIntent,
+    INTENSITY_LOGNORMAL_SIGMA,
+    NORMAL_PERSONA_WEIGHTS,
+)
 from attacker.transition_model import TransitionModel
 from attacker.attacker import Attacker
 from defender.classifier import AttackClassifier
@@ -311,10 +317,24 @@ def _plot_feature_distributions(log_dir: str) -> None:
 
     n_samples = 300
     records   = []
+    persona_names = list(NORMAL_PERSONA_WEIGHTS.keys())
+    persona_probs = list(NORMAL_PERSONA_WEIGHTS.values())
     for attack_type in AttackType:
         attacker = Attacker(seed=42)
+        # Draw a fresh intensity/persona per sample instead of relying on the
+        # attacker's own session profile, so these 300 "independent" samples
+        # don't all collapse onto one intensity/persona (which would show up
+        # as artificially tight box plots).
+        sample_rng = np.random.default_rng(42 + int(attack_type) + 1000)
         for _ in range(n_samples):
-            feat = attacker._simulate_features(attack_type)
+            intensity = float(sample_rng.lognormal(0.0, INTENSITY_LOGNORMAL_SIGMA))
+            persona = (
+                str(sample_rng.choice(persona_names, p=persona_probs))
+                if attack_type == AttackType.NORMAL else None
+            )
+            feat = attacker._simulate_features(
+                attack_type, intensity=intensity, persona=persona
+            )
             feat["attack_type"] = attack_type.name
             records.append(feat)
 

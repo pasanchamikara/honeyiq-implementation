@@ -328,3 +328,71 @@ FEATURE_NAMES: List[str] = [
     "sloss", "dloss", "sload", "dload", "spkts",
     "dpkts", "swin", "dwin", "ct_srv_src", "ct_dst_ltm",
 ]
+
+# ---------------------------------------------------------------------------
+# Per-session intensity scaling
+# ---------------------------------------------------------------------------
+# A session-level multiplier (drawn once per Attacker episode) applied to
+# volume-shaped features so a whole session reads as one coherent attacker
+# machine instead of i.i.d. noise every step. TTL/window-size/duration/loss
+# features are left alone — scaling a TCP window or TTL by "intensity" isn't
+# physically meaningful.
+
+INTENSITY_LOGNORMAL_SIGMA: float = 0.35
+INTENSITY_SCALED_FEATURES: frozenset[str] = frozenset({
+    "sbytes", "dbytes", "sload", "dload", "spkts", "dpkts",
+    "ct_srv_src", "ct_dst_ltm",
+})
+
+# ---------------------------------------------------------------------------
+# Benign traffic personas
+# ---------------------------------------------------------------------------
+# Real NORMAL traffic isn't one uniform blob — a crawler, a monitoring probe,
+# and a casual user all look different on the wire. Persona only changes
+# which of the 15 raw feature values get sampled; attack_type stays NORMAL.
+
+NORMAL_PERSONA_DISTRIBUTIONS: Dict[str, Dict[str, Tuple]] = {
+    "casual_user": FEATURE_DISTRIBUTIONS[AttackType.NORMAL],  # unchanged baseline
+
+    "crawler": {
+        "dur":       ("uniform",   0.01,  1.0),
+        "sbytes":    ("lognormal", 6.0,   0.8),
+        "dbytes":    ("lognormal", 6.5,   1.0),
+        "sttl":      ("choice",    [64, 128]),
+        "dttl":      ("choice",    [64, 128]),
+        "sloss":     ("poisson",   0.1),
+        "dloss":     ("poisson",   0.1),
+        "sload":     ("uniform",   200.0, 3_000.0),
+        "dload":     ("uniform",   200.0, 3_000.0),
+        "spkts":     ("poisson",   6),
+        "dpkts":     ("poisson",   6),
+        "swin":      ("choice",    [16384, 32768]),
+        "dwin":      ("choice",    [16384, 32768]),
+        "ct_srv_src":("poisson",   25),   # repeatedly hits the same service
+        "ct_dst_ltm":("poisson",   2),    # stays on one destination
+    },
+
+    "monitoring_probe": {
+        "dur":       ("uniform",   0.0005, 0.05),
+        "sbytes":    ("lognormal", 3.5,    0.5),
+        "dbytes":    ("lognormal", 3.0,    0.5),
+        "sttl":      ("choice",    [64]),
+        "dttl":      ("choice",    [64]),
+        "sloss":     ("poisson",   0.0),
+        "dloss":     ("poisson",   0.0),
+        "sload":     ("uniform",   50.0,  500.0),
+        "dload":     ("uniform",   50.0,  500.0),
+        "spkts":     ("poisson",   2),
+        "dpkts":     ("poisson",   2),
+        "swin":      ("choice",    [65535]),
+        "dwin":      ("choice",    [65535]),
+        "ct_srv_src":("poisson",   3),
+        "ct_dst_ltm":("poisson",   15),   # regularly checks many hosts
+    },
+}
+
+NORMAL_PERSONA_WEIGHTS: Dict[str, float] = {
+    "casual_user":      0.70,
+    "crawler":          0.20,
+    "monitoring_probe": 0.10,
+}

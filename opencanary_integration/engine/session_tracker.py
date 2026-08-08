@@ -13,8 +13,11 @@ from typing import Optional
 
 sys.path.insert(0, os.path.join(os.path.dirname(__file__), '..', '..'))
 
-from attacker.attack_types import AttackType, KillChainStage, AttackerIntent
+from attacker.attack_types import ATTACK_SEVERITY, AttackType, KillChainStage, AttackerIntent
 from opencanary_integration.ingest.logtype_map import initial_stage_for
+from opencanary_integration.engine.reputation import ReputationTracker
+
+DEFAULT_EMA_ALPHA = 0.15
 
 log = logging.getLogger(__name__)
 
@@ -27,11 +30,16 @@ class SessionState:
     attack_count:    int            = 0
     event_count:     int            = 0
     recent_attacks:  deque          = field(default_factory=lambda: deque(maxlen=20))
+    escalation_ema:  float          = 0.0
     last_seen:       datetime       = field(default_factory=datetime.utcnow)
     inferred_intent: AttackerIntent = AttackerIntent.OPPORTUNISTIC
+    reputation:      float          = 0.0
 
     @property
     def escalation_rate(self) -> float:
+        """Window-based rate — fraction of the last N events that were any
+        attack. Kept for backward compatibility; see `escalation_ema` for
+        the severity-weighted alternative."""
         if not self.recent_attacks:
             return 0.0
         return sum(self.recent_attacks) / len(self.recent_attacks)
@@ -42,13 +50,19 @@ class SessionTracker:
         self,
         ttl_seconds: int = 3600,
         escalation_window: int = 20,
+        escalation_ema_alpha: float = DEFAULT_EMA_ALPHA,
         sweep_interval_seconds: int = 60,
     ) -> None:
         self._sessions:     dict[str, SessionState] = {}
         self._ttl           = timedelta(seconds=ttl_seconds)
         self._window_size   = escalation_window
+        self._ema_alpha      = escalation_ema_alpha
         self._sweep_interval = timedelta(seconds=sweep_interval_seconds)
         self._last_sweep    = datetime.min.replace(tzinfo=timezone.utc)
+        # Cross-session, time-decayed offense score per source IP — survives
+        # individual SessionState TTL expiry (see reputation.py). Public so
+        # an operator/inspection tool can query or reset it directly.
+        self.reputation = ReputationTracker()
 
     def update(self, src_ip: str, attack_type: AttackType) -> SessionState:
         self._expire_old_sessions()
@@ -70,10 +84,15 @@ class SessionTracker:
 
         is_attack = attack_type != AttackType.NORMAL
         session.recent_attacks.append(int(is_attack))
+        severity = ATTACK_SEVERITY[int(attack_type)]
+        session.escalation_ema = (
+            self._ema_alpha * severity + (1 - self._ema_alpha) * session.escalation_ema
+        )
         if is_attack:
             session.attack_count += 1
         session.event_count += 1
         session.last_seen = datetime.now(timezone.utc)
+        session.reputation = self.reputation.record_offense(src_ip, severity)
         return session
 
     def get(self, src_ip: str) -> Optional[SessionState]:

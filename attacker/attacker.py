@@ -16,6 +16,10 @@ from .attack_types import (
     FEATURE_DISTRIBUTIONS,
     FEATURE_NAMES,
     ATTACK_PRIMARY_STAGE,
+    INTENSITY_LOGNORMAL_SIGMA,
+    INTENSITY_SCALED_FEATURES,
+    NORMAL_PERSONA_DISTRIBUTIONS,
+    NORMAL_PERSONA_WEIGHTS,
 )
 from .transition_model import TransitionModel
 
@@ -49,6 +53,7 @@ class Attacker:
         self.current_stage: KillChainStage = KillChainStage.RECONNAISSANCE
         self.attack_count: int = 0
         self.step_count: int = 0
+        self._draw_session_profile()
 
     # ------------------------------------------------------------------
     # Public API
@@ -63,6 +68,23 @@ class Attacker:
         # Re-seed RNG for reproducibility if a seed was provided
         if self._seed is not None:
             self.rng = np.random.default_rng(self._seed)
+        self._draw_session_profile()
+
+    def _draw_session_profile(self) -> None:
+        """
+        Draw this session's persistent "character": an intensity scalar that
+        consistently biases volume-shaped features for the whole episode
+        (so a session reads as one coherent attacker machine instead of
+        independent per-step noise), and a benign persona governing which
+        NORMAL distribution this session's benign packets follow.
+        """
+        self._intensity: float = float(
+            self.rng.lognormal(0.0, INTENSITY_LOGNORMAL_SIGMA)
+        )
+        self._benign_persona: str = str(self.rng.choice(
+            list(NORMAL_PERSONA_WEIGHTS.keys()),
+            p=list(NORMAL_PERSONA_WEIGHTS.values()),
+        ))
 
     def step(self) -> Dict[str, Any]:
         """
@@ -138,12 +160,31 @@ class Attacker:
     # Feature simulation
     # ------------------------------------------------------------------
 
-    def _simulate_features(self, attack_type: AttackType) -> Dict[str, float]:
+    def _simulate_features(
+        self,
+        attack_type: AttackType,
+        *,
+        intensity: float | None = None,
+        persona:   str | None = None,
+    ) -> Dict[str, float]:
         """
         Generate synthetic network flow features for a given attack type,
         sampled from the distributions defined in FEATURE_DISTRIBUTIONS.
+
+        `intensity`/`persona` default to this session's own profile (drawn
+        in `_draw_session_profile`), so `step()` produces features coherent
+        with the rest of the episode. Callers that need many independent
+        samples of the same attack_type (e.g. classifier training-data
+        generation) should pass fresh values explicitly per sample instead
+        of relying on the session default, or every sample would otherwise
+        share one intensity/persona and understate real feature variance.
+        `persona` only applies when `attack_type == AttackType.NORMAL`.
         """
-        dist_spec = FEATURE_DISTRIBUTIONS[attack_type]
+        if attack_type == AttackType.NORMAL:
+            dist_spec = NORMAL_PERSONA_DISTRIBUTIONS[persona or self._benign_persona]
+        else:
+            dist_spec = FEATURE_DISTRIBUTIONS[attack_type]
+        eff_intensity = self._intensity if intensity is None else intensity
         features: Dict[str, float] = {}
 
         for name in FEATURE_NAMES:
@@ -162,6 +203,9 @@ class Attacker:
                 val = float(spec[1])
             else:
                 raise ValueError(f"Unknown distribution type: {kind!r}")
+
+            if name in INTENSITY_SCALED_FEATURES:
+                val *= eff_intensity
 
             features[name] = max(0.0, val)
 

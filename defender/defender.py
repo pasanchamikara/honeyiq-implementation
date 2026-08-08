@@ -84,9 +84,10 @@ class Defender:
 
     def observe(
         self,
-        state:    np.ndarray,
-        features: dict[str, float],
-        training: bool = True,  # ignored — SEDM is deterministic
+        state:      np.ndarray,
+        features:   dict[str, float],
+        training:   bool = True,  # ignored — SEDM is deterministic
+        reputation: float = 0.0,
     ) -> tuple[int, AttackType]:
         """
         Given the current environment state vector and raw network features:
@@ -95,6 +96,12 @@ class Defender:
         2. Decode kill chain stage, escalation rate, and inferred intent from
            the state vector.
         3. Query the MatrixPolicy for the optimal honeypot action.
+
+        Parameters
+        ----------
+        reputation : cross-session offense score for this source IP [0, 1];
+            defaults to 0.0 (no persistent IP identity exists in the
+            synthetic env/eval harness, so R4 never fires there).
 
         Returns
         -------
@@ -108,7 +115,7 @@ class Defender:
             predicted_attack = AttackType.NORMAL
 
         # -- Action selection from SEDM ------------------------------------
-        action, _info = self.matrix_policy.decide_from_state(state)
+        action, _info = self.matrix_policy.decide_from_state(state, reputation=reputation)
         return int(action), predicted_attack
 
     def get_attack_probabilities(

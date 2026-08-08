@@ -75,8 +75,9 @@ class PolicyEngine:
 
     def decide(
         self,
-        state:    np.ndarray,
-        features: Optional[dict[str, float]] = None,
+        state:      np.ndarray,
+        features:   Optional[dict[str, float]] = None,
+        reputation: float = 0.0,
     ) -> tuple[HoneypotAction, Optional[AttackType]]:
         """
         Select a honeypot action for the given 24-dim state vector.
@@ -87,13 +88,16 @@ class PolicyEngine:
             Built by state_builder.build_state().
         features : dict | None
             Optional UNSW-NB15-style feature dict for classifier inference.
+        reputation : float
+            Cross-session offense score for this source IP (see
+            SessionTracker.reputation); defaults to 0.0.
 
         Returns
         -------
         action               : HoneypotAction selected by SEDM
         classifier_prediction: AttackType | None
         """
-        action, info = self._policy.decide_from_state(state)
+        action, info = self._policy.decide_from_state(state, reputation=reputation)
 
         log.debug(
             "SEDM decision: stage=%s band=%s esc_risk=%.3f action=%s",

@@ -27,12 +27,14 @@ from attacker.attack_types import (
     AttackType,
     KillChainStage,
     AttackerIntent,
+    ATTACK_SEVERITY,
 )
 from attacker.attacker import Attacker
 from defender.honeypot import compute_threat_level, compute_reward, HoneypotAction
 
 STATE_DIM  = 24
 ACTION_DIM =  5
+DEFAULT_EMA_ALPHA = 0.15
 
 
 def encode_state(
@@ -69,7 +71,19 @@ class CyberSecurityEnv(gym.Env):
     max_steps : int
         Maximum number of steps before truncation.
     escalation_window : int
-        Sliding window size (in steps) for computing escalation_rate.
+        Sliding window size (in steps) for computing the window-based
+        escalation_rate (used when escalation_mode == "window").
+    escalation_mode : str
+        "window" (default): escalation_rate is the fraction of the last
+        `escalation_window` steps that were any attack — a hard cutoff,
+        binary per step. "ema": escalation_rate is a severity-weighted
+        exponential moving average instead — smoother, and reflects how
+        *bad* recent attacks were, not just how many. Both signals are
+        always computed and exposed in `info` as `escalation_window_rate`
+        and `escalation_ema`, regardless of which one feeds the state
+        vector, so switching modes is purely which one `state[19]` sees.
+    escalation_ema_alpha : float
+        EMA smoothing factor (higher = more weight on the latest step).
     seed : int | None
         Random seed.
     render_mode : str | None
@@ -80,21 +94,30 @@ class CyberSecurityEnv(gym.Env):
 
     def __init__(
         self,
-        attacker_intent:    AttackerIntent = AttackerIntent.OPPORTUNISTIC,
-        max_steps:          int = 500,
-        escalation_window:  int = 20,
-        seed:               Optional[int] = None,
-        render_mode:        Optional[str] = None,
-        benign_ratio:       float = 0.0,
+        attacker_intent:      AttackerIntent = AttackerIntent.OPPORTUNISTIC,
+        max_steps:            int = 500,
+        escalation_window:    int = 20,
+        escalation_mode:      str = "window",
+        escalation_ema_alpha: float = DEFAULT_EMA_ALPHA,
+        seed:                 Optional[int] = None,
+        render_mode:          Optional[str] = None,
+        benign_ratio:         float = 0.0,
     ) -> None:
         super().__init__()
 
-        self.attacker_intent   = attacker_intent
-        self.max_steps         = max_steps
-        self.escalation_window = escalation_window
-        self.render_mode       = render_mode
-        self._seed             = seed
-        self.benign_ratio      = float(np.clip(benign_ratio, 0.0, 1.0))
+        if escalation_mode not in ("window", "ema"):
+            raise ValueError(
+                f"escalation_mode must be 'window' or 'ema', got {escalation_mode!r}"
+            )
+
+        self.attacker_intent     = attacker_intent
+        self.max_steps           = max_steps
+        self.escalation_window   = escalation_window
+        self.escalation_mode     = escalation_mode
+        self.escalation_ema_alpha = escalation_ema_alpha
+        self.render_mode         = render_mode
+        self._seed               = seed
+        self.benign_ratio        = float(np.clip(benign_ratio, 0.0, 1.0))
 
         # Spaces
         self.observation_space = spaces.Box(
@@ -105,6 +128,7 @@ class CyberSecurityEnv(gym.Env):
         # Components (initialized in reset)
         self._attacker:          Optional[Attacker] = None
         self._recent_attacks:    deque               = deque(maxlen=escalation_window)
+        self._escalation_ema:    float               = 0.0
 
         # Episode tracking
         self._step_count:        int   = 0
@@ -131,6 +155,7 @@ class CyberSecurityEnv(gym.Env):
             seed=effective_seed,
         )
         self._recent_attacks = deque(maxlen=self.escalation_window)
+        self._escalation_ema = 0.0
         self._step_count   = 0
         self._total_attacks = 0
         self._current_threat = 0.0
@@ -149,6 +174,7 @@ class CyberSecurityEnv(gym.Env):
                 "kill_chain_stage": KillChainStage.RECONNAISSANCE,
                 "threat_level": 0.0, "is_attack": False,
                 "features": {}, "escalation_rate": 0.0,
+                "escalation_window_rate": 0.0, "escalation_ema": 0.0,
                 "attack_count": 0}
         self._last_info = info
         return initial_state, info
@@ -180,9 +206,20 @@ class CyberSecurityEnv(gym.Env):
 
         # Update sliding window for escalation rate
         self._recent_attacks.append(int(is_attack))
-        escalation_rate = (
+        window_rate = (
             sum(self._recent_attacks) / len(self._recent_attacks)
             if self._recent_attacks else 0.0
+        )
+
+        # Severity-weighted EMA — smoother than the hard window cutoff, and
+        # reflects how bad recent attacks were, not just how many occurred.
+        severity = ATTACK_SEVERITY[int(attack_type)]
+        self._escalation_ema = (
+            self.escalation_ema_alpha * severity
+            + (1 - self.escalation_ema_alpha) * self._escalation_ema
+        )
+        escalation_rate = (
+            self._escalation_ema if self.escalation_mode == "ema" else window_rate
         )
 
         if is_attack:
@@ -228,6 +265,8 @@ class CyberSecurityEnv(gym.Env):
             "is_attack":        is_attack,
             "features":         features,
             "escalation_rate":  escalation_rate,
+            "escalation_window_rate": window_rate,
+            "escalation_ema":   self._escalation_ema,
             "attack_count":     self._total_attacks,
             "action_name":      HoneypotAction(action).name,
             "next_probs":       atk_info["next_probabilities"],
