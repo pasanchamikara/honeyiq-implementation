@@ -34,9 +34,18 @@ class EscalationPredictor:
     def next_stage_probs(self, current: KillChainStage) -> np.ndarray:
         return self._model.get_stage_probabilities(current)
 
-    def escalation_risk(self, current_stage: KillChainStage) -> float:
-        """P(advancing to a stage strictly beyond current_stage)."""
-        probs = self.next_stage_probs(current_stage)
+    def escalation_risk(
+        self,
+        current_stage: KillChainStage,
+        probs: np.ndarray | None = None,
+    ) -> float:
+        """P(advancing to a stage strictly beyond current_stage).
+
+        Pass `probs` (from a prior `next_stage_probs()` call) to avoid
+        recomputing the transition row when the caller already has it.
+        """
+        if probs is None:
+            probs = self.next_stage_probs(current_stage)
         return float(probs[int(current_stage) + 1:].sum())
 
     def most_likely_next_stage(self, current: KillChainStage) -> KillChainStage:

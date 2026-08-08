@@ -38,10 +38,17 @@ class SessionState:
 
 
 class SessionTracker:
-    def __init__(self, ttl_seconds: int = 3600, escalation_window: int = 20) -> None:
-        self._sessions:   dict[str, SessionState] = {}
-        self._ttl         = timedelta(seconds=ttl_seconds)
-        self._window_size = escalation_window
+    def __init__(
+        self,
+        ttl_seconds: int = 3600,
+        escalation_window: int = 20,
+        sweep_interval_seconds: int = 60,
+    ) -> None:
+        self._sessions:     dict[str, SessionState] = {}
+        self._ttl           = timedelta(seconds=ttl_seconds)
+        self._window_size   = escalation_window
+        self._sweep_interval = timedelta(seconds=sweep_interval_seconds)
+        self._last_sweep    = datetime.min.replace(tzinfo=timezone.utc)
 
     def update(self, src_ip: str, attack_type: AttackType) -> SessionState:
         self._expire_old_sessions()
@@ -81,7 +88,12 @@ class SessionTracker:
         return dict(self._sessions)
 
     def _expire_old_sessions(self) -> None:
-        cutoff  = datetime.now(timezone.utc) - self._ttl
+        now = datetime.now(timezone.utc)
+        if now - self._last_sweep < self._sweep_interval:
+            return
+        self._last_sweep = now
+
+        cutoff  = now - self._ttl
         expired = [ip for ip, s in self._sessions.items() if s.last_seen < cutoff]
         for ip in expired:
             del self._sessions[ip]

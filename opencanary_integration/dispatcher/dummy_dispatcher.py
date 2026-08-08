@@ -1,21 +1,15 @@
 """
-Dummy dispatcher — replaces REST/gRPC with in-memory DummyHoneypot calls.
-
-Satisfies the same async interface as RESTDispatcher and GRPCDispatcher so
-the Pipeline can select it via ``dispatcher_mode = "dummy"``.  No network
-connections, no external services required.
+Dummy dispatcher — replaces a real REST/gRPC dispatch call with an in-memory
+DummyHoneypot call, so the pipeline can run end-to-end with no network
+connections or external services required.
 """
 
 from __future__ import annotations
 
 import logging
-from typing import TYPE_CHECKING
 
 from opencanary_integration.dispatcher.models import DecisionPayload
 from opencanary_integration.emulator.honeypot_emulator import DummyHoneypot
-
-if TYPE_CHECKING:
-    pass
 
 log = logging.getLogger(__name__)
 

@@ -28,7 +28,14 @@ import numpy as np
 
 sys.path.insert(0, os.path.dirname(os.path.dirname(__file__)))
 
-from attacker.attack_types import AttackType, KillChainStage, AttackerIntent
+from attacker.attack_types import (
+    ATTACK_SEVERITY,
+    KILL_CHAIN_WEIGHT,
+    AttackType,
+    KillChainStage,
+    AttackerIntent,
+)
+from defender.classifier import AttackClassifier
 from defender.defender import Defender
 from defender.honeypot import HoneypotAction
 from defender.matrix_policy import MatrixPolicy
@@ -37,14 +44,6 @@ from environment.cyber_env import CyberSecurityEnv
 # ---------------------------------------------------------------------------
 # Constants
 # ---------------------------------------------------------------------------
-
-ACTION_SEVERITY: Dict[int, int] = {
-    HoneypotAction.ALLOW: 0,
-    HoneypotAction.LOG:   1,
-    HoneypotAction.TROLL: 2,
-    HoneypotAction.BLOCK: 3,
-    HoneypotAction.ALERT: 4,
-}
 
 # Minimum expected action severity at each kill chain stage
 MIN_SEVERITY_AT_STAGE: Dict[int, int] = {
@@ -115,7 +114,6 @@ class EpisodeResult:
 
 def _compute_composite_risk(state: np.ndarray) -> float:
     """Re-derive composite risk from raw state for logging."""
-    from attacker.attack_types import ATTACK_SEVERITY, KILL_CHAIN_WEIGHT
     attack_idx = int(np.argmax(state[0:10]))
     stage_idx  = int(np.argmax(state[10:17]))
     esc_rate   = float(state[19])
@@ -133,6 +131,7 @@ def run_intent(
     seed:              int,
     model_dir:         str,
     classifier_driven: bool = False,
+    classifier:        Optional[AttackClassifier] = None,
 ) -> Tuple[List[EpisodeResult], List[FullStepRecord]]:
     """
     Run n_episodes for a single intent, returning per-episode results and step records.
@@ -165,11 +164,14 @@ def run_intent(
         seed=seed,
     )
     defender = Defender(default_intent=intent)
-    clf_path = os.path.join(model_dir, "classifier.joblib")
-    if os.path.exists(clf_path):
-        defender.load(model_dir)
+    if classifier is not None:
+        defender.classifier = classifier
     else:
-        defender.initialize_classifier()
+        clf_path = os.path.join(model_dir, "classifier.joblib")
+        if os.path.exists(clf_path):
+            defender.load(model_dir)
+        else:
+            defender.initialize_classifier()
 
     mp = MatrixPolicy(default_intent=intent)
 
@@ -273,7 +275,7 @@ def _aggregate_episode(
     # fraction of steps where action severity >= minimum expected for that stage
     prop_hits = sum(
         1 for r in records
-        if ACTION_SEVERITY[r.action] >= MIN_SEVERITY_AT_STAGE[r.kill_chain_stage]
+        if r.action >= MIN_SEVERITY_AT_STAGE[r.kill_chain_stage]
     )
     prop_score = prop_hits / len(records)
 
@@ -603,7 +605,7 @@ def make_plots(
     # ── Response proportionality: mean action severity per stage ─────────
     stage_sev: Dict[int, List[float]] = defaultdict(list)
     for r in all_records:
-        stage_sev[r.kill_chain_stage].append(ACTION_SEVERITY[r.action])
+        stage_sev[r.kill_chain_stage].append(r.action)
 
     mean_sevs = [float(np.mean(stage_sev[s])) for s in range(KillChainStage.count())]
     min_sevs  = [MIN_SEVERITY_AT_STAGE[s] for s in range(KillChainStage.count())]
@@ -692,6 +694,15 @@ def evaluate(
     all_records:  List[FullStepRecord]  = []
     intent_results: Dict[str, List[EpisodeResult]] = {}
 
+    # Load the classifier once — it's intent-independent, so reuse it across
+    # every intent below instead of re-reading classifier.joblib each time.
+    shared_classifier = AttackClassifier()
+    clf_path = os.path.join(model_dir, "classifier.joblib")
+    if os.path.exists(clf_path):
+        shared_classifier.load(clf_path)
+    else:
+        shared_classifier.fit_from_simulation(seed=seed)
+
     for intent in AttackerIntent:
         print(f"[Eval] Running {n_episodes} episodes — intent: {intent.name} ...")
         ep_results, step_recs = run_intent(
@@ -702,6 +713,7 @@ def evaluate(
             seed=seed,
             model_dir=model_dir,
             classifier_driven=classifier_driven,
+            classifier=shared_classifier,
         )
         intent_results[intent.name] = ep_results
         all_records.extend(step_recs)
@@ -727,7 +739,7 @@ def evaluate(
         from scipy.stats import spearmanr
         attack_recs = [r for r in all_records if r.is_attack]
         stages      = [r.kill_chain_stage for r in attack_recs]
-        severities  = [ACTION_SEVERITY[r.action] for r in attack_recs]
+        severities  = [r.action for r in attack_recs]
         spearman_rho, spearman_p = spearmanr(stages, severities)
         spearman_rho = float(spearman_rho)
         print(f"\n[Eval] Spearman ρ (stage vs action severity, attack-only): {spearman_rho:.4f}  p={spearman_p:.2e}")

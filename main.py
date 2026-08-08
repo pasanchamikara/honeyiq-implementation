@@ -33,9 +33,9 @@ import seaborn as sns
 from attacker.attack_types import AttackType, KillChainStage, AttackerIntent
 from attacker.transition_model import TransitionModel
 from attacker.attacker import Attacker
+from defender.classifier import AttackClassifier
 from defender.defender import Defender
 from defender.honeypot import HoneypotAction, threat_band
-from defender.matrix_policy import MatrixPolicy
 from environment.cyber_env import CyberSecurityEnv
 from evaluation.metrics import MetricsCollector, StepRecord
 
@@ -92,7 +92,7 @@ def run_demo(
         stage        = info.get("kill_chain_stage", KillChainStage.RECONNAISSANCE)
         threat_level = info.get("threat_level", 0.0)
         is_attack    = info.get("is_attack", False)
-        aligned_info = dict(info)
+        aligned_info = info
 
         next_state, reward, terminated, truncated, info = env.step(action)
 
@@ -185,11 +185,21 @@ def run_compare(
     print(f"  Episodes per intent: {n_episodes}  |  Steps per episode: {n_steps}")
     print(f"{'='*70}\n")
 
+    # Load the classifier once — it's intent-independent, so reuse it across
+    # every intent below instead of re-reading classifier.joblib each time.
+    shared_classifier = AttackClassifier()
+    clf_path = os.path.join(model_dir, "classifier.joblib")
+    if os.path.exists(clf_path):
+        shared_classifier.load(clf_path)
+        print(f"[Defender] Classifier loaded from {clf_path}")
+    else:
+        print(f"[Defender] Warning: Classifier not found at {clf_path}")
+
     results = {}
     for intent in AttackerIntent:
         env      = CyberSecurityEnv(attacker_intent=intent, max_steps=n_steps)
         defender = Defender(default_intent=intent)
-        defender.load(model_dir)  # loads classifier only
+        defender.classifier = shared_classifier
 
         ep_rewards = []
         ep_det     = []
@@ -205,7 +215,7 @@ def run_compare(
                 # Score against the ground truth of the observation the action
                 # was chosen from (`info`), not the *next* step's info returned
                 # by env.step() below — see docs/BUGS_AND_FIXES.md, Bug 8.
-                aligned_info = dict(info)
+                aligned_info = info
                 next_state, reward, terminated, truncated, info = env.step(action)
                 metrics.record_step(ep_idx, step, action, reward, aligned_info, pred_attack, None)
                 state = next_state

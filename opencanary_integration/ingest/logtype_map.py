@@ -4,7 +4,7 @@ Map OpenCanary logtype codes → AttackType and initial KillChainStage.
 
 from __future__ import annotations
 
-from attacker.attack_types import AttackType, KillChainStage
+from attacker.attack_types import ATTACK_PRIMARY_STAGE, AttackType, KillChainStage
 from opencanary_integration.ingest.models import OpenCanaryEvent
 
 
@@ -30,20 +30,6 @@ _LOGTYPE_TO_ATTACK: dict[int, AttackType] = {
     22000: AttackType.EXPLOITS,         # SSH brute-force
 }
 
-_ATTACK_TO_INITIAL_STAGE: dict[AttackType, KillChainStage] = {
-    AttackType.NORMAL:         KillChainStage.RECONNAISSANCE,
-    AttackType.RECONNAISSANCE: KillChainStage.RECONNAISSANCE,
-    AttackType.ANALYSIS:       KillChainStage.WEAPONIZATION,
-    AttackType.FUZZERS:        KillChainStage.DELIVERY,
-    AttackType.EXPLOITS:       KillChainStage.EXPLOITATION,
-    AttackType.BACKDOORS:      KillChainStage.INSTALLATION,
-    AttackType.SHELLCODE:      KillChainStage.EXPLOITATION,
-    AttackType.GENERIC:        KillChainStage.DELIVERY,
-    AttackType.DOS:            KillChainStage.ACTIONS_ON_OBJ,
-    AttackType.WORMS:          KillChainStage.COMMAND_AND_CTRL,
-}
-
-
 def map_logtype(event: OpenCanaryEvent) -> AttackType:
     """Return the AttackType corresponding to an OpenCanary logtype."""
     return _LOGTYPE_TO_ATTACK.get(event.logtype, AttackType.GENERIC)
@@ -51,4 +37,4 @@ def map_logtype(event: OpenCanaryEvent) -> AttackType:
 
 def initial_stage_for(attack_type: AttackType) -> KillChainStage:
     """Return the default kill chain entry stage for an attack type."""
-    return _ATTACK_TO_INITIAL_STAGE.get(attack_type, KillChainStage.RECONNAISSANCE)
+    return KillChainStage(ATTACK_PRIMARY_STAGE.get(attack_type, KillChainStage.RECONNAISSANCE))

@@ -35,6 +35,29 @@ STATE_DIM  = 24
 ACTION_DIM =  5
 
 
+def encode_state(
+    attack_type:      AttackType,
+    kill_chain_stage: KillChainStage,
+    threat_level:     float,
+    attack_count:     int,
+    escalation_rate:  float,
+    intent:           AttackerIntent,
+) -> np.ndarray:
+    """Build the 24-dim state vector shared by the training env and the
+    OpenCanary integration's live inference path (see module docstring for
+    the layout)."""
+    state = np.zeros(STATE_DIM, dtype=np.float32)
+
+    state[int(attack_type)]           = 1.0   # [0:10]
+    state[10 + int(kill_chain_stage)] = 1.0   # [10:17]
+    state[17] = float(threat_level)
+    state[18] = float(min(1.0, attack_count / 100.0))
+    state[19] = float(escalation_rate)
+    state[20 + int(intent)]           = 1.0   # [20:24]
+
+    return state
+
+
 class CyberSecurityEnv(gym.Env):
     """
     Gymnasium environment for the attacker-defender cybersecurity game.
@@ -113,7 +136,7 @@ class CyberSecurityEnv(gym.Env):
         self._current_threat = 0.0
 
         # Build initial state from the attacker's starting position
-        initial_state = self._build_state(
+        initial_state = encode_state(
             attack_type    = self._attacker.current_attack,
             kill_chain_stage = self._attacker.current_stage,
             threat_level   = 0.0,
@@ -184,7 +207,7 @@ class CyberSecurityEnv(gym.Env):
         )
 
         # Next state
-        next_state = self._build_state(
+        next_state = encode_state(
             attack_type      = attack_type,
             kill_chain_stage = kill_chain_stage,
             threat_level     = threat_level,
@@ -216,37 +239,6 @@ class CyberSecurityEnv(gym.Env):
             self.render()
 
         return next_state, reward, terminated, truncated, info
-
-    # ------------------------------------------------------------------
-    # State construction
-    # ------------------------------------------------------------------
-
-    def _build_state(
-        self,
-        attack_type:      AttackType,
-        kill_chain_stage: KillChainStage,
-        threat_level:     float,
-        attack_count:     int,
-        escalation_rate:  float,
-        intent:           AttackerIntent,
-    ) -> np.ndarray:
-        state = np.zeros(STATE_DIM, dtype=np.float32)
-
-        # One-hot: attack type (indices 0-9)
-        state[int(attack_type)] = 1.0
-
-        # One-hot: kill chain stage (indices 10-16)
-        state[10 + int(kill_chain_stage)] = 1.0
-
-        # Continuous features
-        state[17] = float(threat_level)
-        state[18] = float(min(1.0, attack_count / 100.0))
-        state[19] = float(escalation_rate)
-
-        # One-hot: attacker intent (indices 20-23)
-        state[20 + int(intent)] = 1.0
-
-        return state
 
     # ------------------------------------------------------------------
     # Rendering

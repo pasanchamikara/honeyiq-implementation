@@ -99,9 +99,10 @@ class EmulatorScenario:
 
         action, _ = self.policy.decide(state)
 
-        stage_probs  = self.predictor.next_stage_probs(session.current_stage).tolist()
+        stage_probs_arr = self.predictor.next_stage_probs(session.current_stage)
         attack_probs = self.predictor.next_attack_probs(session.current_attack).tolist()
-        esc_risk     = self.predictor.escalation_risk(session.current_stage)
+        esc_risk     = self.predictor.escalation_risk(session.current_stage, probs=stage_probs_arr)
+        stage_probs  = stage_probs_arr.tolist()
 
         decision = {
             "event_id":        str(uuid4()),

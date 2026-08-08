@@ -16,7 +16,7 @@ import logging
 from collections import defaultdict
 from dataclasses import dataclass, field
 from datetime import datetime, timezone
-from typing import Any
+from typing import Any, IO, Optional
 
 log = logging.getLogger(__name__)
 
@@ -64,6 +64,15 @@ class DummyHoneypot:
         "ALERT": "\033[35m[  ALERT ]\033[0m",   # magenta
     }
 
+    # Action → handler method name (dispatched via _dispatch)
+    _HANDLERS: dict[str, str] = {
+        "ALLOW": "_allow",
+        "LOG":   "_log",
+        "TROLL": "_troll",
+        "BLOCK": "_block",
+        "ALERT": "_alert",
+    }
+
     def __init__(
         self,
         audit_file: str | None = None,
@@ -71,9 +80,21 @@ class DummyHoneypot:
     ) -> None:
         self._state:      dict[str, _IPState] = defaultdict(_IPState)
         self._audit_file  = audit_file
+        self._audit_fh:   Optional[IO[str]] = (
+            open(audit_file, "a") if audit_file else None
+        )
         self._verbose     = verbose
         self._lock        = asyncio.Lock()
         self._action_log: list[dict[str, Any]] = []
+
+    def close(self) -> None:
+        """Flush and close the audit file handle, if one is open."""
+        if self._audit_fh is not None:
+            self._audit_fh.close()
+            self._audit_fh = None
+
+    def __del__(self) -> None:
+        self.close()
 
     # ------------------------------------------------------------------
     # Core interface (mirrors ConfManager)
@@ -244,13 +265,7 @@ class DummyHoneypot:
         threat_level: float,
         event_id: str,
     ) -> None:
-        handler = {
-            "ALLOW": self._allow,
-            "LOG":   self._log,
-            "TROLL": self._troll,
-            "BLOCK": self._block,
-            "ALERT": self._alert,
-        }.get(action, self._log)
+        handler = getattr(self, self._HANDLERS.get(action, "_log"))
         handler(src_ip, state)
 
         record = {
@@ -275,9 +290,9 @@ class DummyHoneypot:
             if state.notes:
                 print(f"           └─ {state.notes[-1]}")
 
-        if self._audit_file:
-            with open(self._audit_file, "a") as fh:
-                fh.write(json.dumps(record) + "\n")
+        if self._audit_fh is not None:
+            self._audit_fh.write(json.dumps(record) + "\n")
+            self._audit_fh.flush()
 
         log.info(
             "Dummy honeypot: %s src=%s attack=%s stage=%s threat=%.3f",

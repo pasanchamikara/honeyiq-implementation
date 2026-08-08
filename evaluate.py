@@ -17,7 +17,7 @@ import os
 import sys
 from collections import Counter
 from dataclasses import dataclass, field
-from typing import Dict, List
+from typing import Dict, List, Optional
 
 import numpy as np
 import pandas as pd
@@ -30,9 +30,14 @@ import seaborn as sns
 sys.path.insert(0, os.path.dirname(__file__))
 
 from attacker.attack_types import AttackerIntent, AttackType, KillChainStage
+from defender.classifier import AttackClassifier
 from defender.defender import Defender
 from defender.honeypot import HoneypotAction
-from defender.matrix_policy import MatrixPolicy, _SEDM
+from defender.matrix_policy import (
+    ESC_HIGH_THRESHOLD,
+    ESC_LOW_THRESHOLD,
+    MatrixPolicy,
+)
 from environment.cyber_env import CyberSecurityEnv
 from evaluation.metrics import MetricsCollector
 
@@ -54,9 +59,22 @@ ACTION_COLORS = {
     "BLOCK": "#EF5350",
     "ALERT": "#AB47BC",
 }
-ESC_BANDS    = ["Low\n(<0.35)", "Medium\n(0.35–0.65)", "High\n(≥0.65)"]
+ESC_BANDS = [
+    f"Low\n(<{ESC_LOW_THRESHOLD})",
+    f"Medium\n({ESC_LOW_THRESHOLD}–{ESC_HIGH_THRESHOLD})",
+    f"High\n(≥{ESC_HIGH_THRESHOLD})",
+]
 STAGE_LABELS = KillChainStage.names()
 ACTION_NAMES = HoneypotAction.names()
+
+
+def _save_fig(fig, out_dir: str, filename: str, label: str | None = None) -> None:
+    """Finalize, save, and close a figure, with a consistent [Eval] log line."""
+    plt.tight_layout()
+    path = os.path.join(out_dir, filename)
+    plt.savefig(path, dpi=150, bbox_inches="tight")
+    plt.close(fig)
+    print(f"[Eval] {label or filename} → {path}")
 
 
 # ---------------------------------------------------------------------------
@@ -74,24 +92,37 @@ class IntentResult:
     kc_counts:      Counter     = field(default_factory=Counter)
     risk_scores:    List[float] = field(default_factory=list)
 
-    mean_reward: float = 0.0
-    std_reward:  float = 0.0
-    mean_det:    float = 0.0
-    std_det:     float = 0.0
-    mean_fp:     float = 0.0
-    std_fp:      float = 0.0
-    mean_threat: float = 0.0
-    mean_risk:   float = 0.0
+    @property
+    def mean_reward(self) -> float:
+        return float(np.mean(self.rewards))
 
-    def compute_summaries(self) -> None:
-        self.mean_reward = float(np.mean(self.rewards))
-        self.std_reward  = float(np.std(self.rewards))
-        self.mean_det    = float(np.mean(self.det_rates))
-        self.std_det     = float(np.std(self.det_rates))
-        self.mean_fp     = float(np.mean(self.fp_rates))
-        self.std_fp      = float(np.std(self.fp_rates))
-        self.mean_threat = float(np.mean(self.threat_levels))
-        self.mean_risk   = float(np.mean(self.risk_scores)) if self.risk_scores else 0.0
+    @property
+    def std_reward(self) -> float:
+        return float(np.std(self.rewards))
+
+    @property
+    def mean_det(self) -> float:
+        return float(np.mean(self.det_rates))
+
+    @property
+    def std_det(self) -> float:
+        return float(np.std(self.det_rates))
+
+    @property
+    def mean_fp(self) -> float:
+        return float(np.mean(self.fp_rates))
+
+    @property
+    def std_fp(self) -> float:
+        return float(np.std(self.fp_rates))
+
+    @property
+    def mean_threat(self) -> float:
+        return float(np.mean(self.threat_levels))
+
+    @property
+    def mean_risk(self) -> float:
+        return float(np.mean(self.risk_scores)) if self.risk_scores else 0.0
 
 
 # ---------------------------------------------------------------------------
@@ -103,7 +134,7 @@ def plot_decision_matrix(out_dir: str) -> None:
     Visualise the 7×3 SEDM as a heatmap and save it.
     Action integers: ALLOW=0 LOG=1 TROLL=2 BLOCK=3 ALERT=4
     """
-    matrix = np.array([[int(a) for a in row] for row in _SEDM])
+    matrix = np.array([[int(a) for a in row] for row in MatrixPolicy.get_matrix_actions()])
 
     fig, ax = plt.subplots(figsize=(8, 6))
     cmap = matplotlib.colors.ListedColormap(
@@ -141,11 +172,7 @@ def plot_decision_matrix(out_dir: str) -> None:
     ax.legend(handles=patches, loc="upper right",
               bbox_to_anchor=(1.28, 1.0), fontsize=9, framealpha=0.9)
 
-    plt.tight_layout()
-    path = os.path.join(out_dir, "sedm_decision_matrix.png")
-    plt.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"[Eval] SEDM heatmap → {path}")
+    _save_fig(fig, out_dir, "sedm_decision_matrix.png", "SEDM heatmap")
 
 
 def plot_escalation_risk_per_intent(out_dir: str) -> None:
@@ -168,11 +195,12 @@ def plot_escalation_risk_per_intent(out_dir: str) -> None:
             probs = tm.get_stage_probabilities(s)
             risks.append(float(probs[int(s) + 1:].sum()))
 
-        colors = ["#F44336" if r >= 0.65 else "#FF9800" if r >= 0.35 else "#4CAF50"
-                  for r in risks]
+        colors = ["#F44336" if r >= ESC_HIGH_THRESHOLD
+                  else "#FF9800" if r >= ESC_LOW_THRESHOLD
+                  else "#4CAF50" for r in risks]
         bars = ax.bar(range(7), risks, color=colors, edgecolor="white", linewidth=0.6)
-        ax.axhline(0.65, color="#F44336", linestyle="--", alpha=0.7, linewidth=1.2, label="High band")
-        ax.axhline(0.35, color="#FF9800", linestyle="--", alpha=0.7, linewidth=1.2, label="Med band")
+        ax.axhline(ESC_HIGH_THRESHOLD, color="#F44336", linestyle="--", alpha=0.7, linewidth=1.2, label="High band")
+        ax.axhline(ESC_LOW_THRESHOLD, color="#FF9800", linestyle="--", alpha=0.7, linewidth=1.2, label="Med band")
         ax.set_xticks(range(7))
         ax.set_xticklabels(
             [s.name.replace("_", "\n") for s in stages],
@@ -191,11 +219,7 @@ def plot_escalation_risk_per_intent(out_dir: str) -> None:
     axes[0].set_ylabel("P(Escalation to Next Stage)", fontsize=10)
     axes[0].legend(fontsize=8, loc="upper right")
 
-    plt.tight_layout()
-    path = os.path.join(out_dir, "escalation_risk_per_intent.png")
-    plt.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"[Eval] Escalation risk chart → {path}")
+    _save_fig(fig, out_dir, "escalation_risk_per_intent.png", "Escalation risk chart")
 
 
 def plot_effective_policy_per_intent(out_dir: str) -> None:
@@ -251,11 +275,7 @@ def plot_effective_policy_per_intent(out_dir: str) -> None:
     ax.legend(handles=patches, loc="upper right",
               bbox_to_anchor=(1.18, 1.0), fontsize=9, framealpha=0.9)
 
-    plt.tight_layout()
-    path = os.path.join(out_dir, "effective_policy_per_intent.png")
-    plt.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"[Eval] Effective policy heatmap → {path}")
+    _save_fig(fig, out_dir, "effective_policy_per_intent.png", "Effective policy heatmap")
 
 
 # ---------------------------------------------------------------------------
@@ -270,6 +290,7 @@ def evaluate_intent(
     out_dir:      str,
     honeypot:     DummyHoneypot,
     benign_ratio: float = 0.0,
+    classifier:   Optional[AttackClassifier] = None,
 ) -> IntentResult:
     """
     Run `n_episodes` greedy evaluation episodes for one attacker intent.
@@ -283,8 +304,11 @@ def evaluate_intent(
         train_classifier=False,
         default_intent=intent,
     )
-    # Load classifier if available
-    defender.load("models/")
+    if classifier is not None:
+        defender.classifier = classifier
+    else:
+        # Load classifier if available
+        defender.load("models/")
 
     fake_ip = f"10.{list(AttackerIntent).index(intent)}.0.1"
     mp      = MatrixPolicy(default_intent=intent)
@@ -326,9 +350,8 @@ def evaluate_intent(
             next_state, reward, terminated, truncated, info = env.step(action_int)
 
             # Score against true ground truth (state_is_attack), not classifier
-            aligned_info = dict(info)
-            aligned_info["is_attack"] = state_is_attack
-            metrics.record_step(ep_idx, step, action_int, reward, aligned_info, pred_attack, None)
+            info["is_attack"] = state_is_attack
+            metrics.record_step(ep_idx, step, action_int, reward, info, pred_attack, None)
 
             attack_name = AttackType(int(info["attack_type"])).name
             stage_name  = KillChainStage(int(info["kill_chain_stage"])).name
@@ -355,7 +378,6 @@ def evaluate_intent(
         result.fp_rates.append(rec.false_positive_rate)
         result.threat_levels.append(rec.avg_threat_level)
 
-    result.compute_summaries()
     return result
 
 
@@ -419,11 +441,7 @@ def plot_metric_comparison(results: Dict[str, IntentResult], out_dir: str) -> No
         ax.spines["top"].set_visible(False)
         ax.spines["right"].set_visible(False)
 
-    plt.tight_layout()
-    path = os.path.join(out_dir, "metric_comparison.png")
-    plt.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"[Eval] metric_comparison.png → {path}")
+    _save_fig(fig, out_dir, "metric_comparison.png")
 
 
 def plot_reward_boxplot(results: Dict[str, IntentResult], out_dir: str) -> None:
@@ -446,11 +464,7 @@ def plot_reward_boxplot(results: Dict[str, IntentResult], out_dir: str) -> None:
     ax.grid(axis="y", alpha=0.3)
     ax.spines["top"].set_visible(False)
     ax.spines["right"].set_visible(False)
-    plt.tight_layout()
-    path = os.path.join(out_dir, "reward_boxplot.png")
-    plt.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"[Eval] reward_boxplot.png → {path}")
+    _save_fig(fig, out_dir, "reward_boxplot.png")
 
 
 def plot_action_distribution(results: Dict[str, IntentResult], out_dir: str) -> None:
@@ -482,11 +496,7 @@ def plot_action_distribution(results: Dict[str, IntentResult], out_dir: str) -> 
     ax.legend(loc="upper right", fontsize=9, framealpha=0.8)
     ax.grid(axis="y", alpha=0.2)
     ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
-    plt.tight_layout()
-    path = os.path.join(out_dir, "action_distribution.png")
-    plt.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"[Eval] action_distribution.png → {path}")
+    _save_fig(fig, out_dir, "action_distribution.png")
 
 
 def plot_composite_risk_distribution(results: Dict[str, IntentResult], out_dir: str) -> None:
@@ -513,11 +523,7 @@ def plot_composite_risk_distribution(results: Dict[str, IntentResult], out_dir: 
     ax.legend(fontsize=8, loc="upper left")
     ax.grid(axis="y", alpha=0.3)
     ax.spines["top"].set_visible(False); ax.spines["right"].set_visible(False)
-    plt.tight_layout()
-    path = os.path.join(out_dir, "composite_risk_distribution.png")
-    plt.savefig(path, dpi=150, bbox_inches="tight")
-    plt.close(fig)
-    print(f"[Eval] composite_risk_distribution.png → {path}")
+    _save_fig(fig, out_dir, "composite_risk_distribution.png")
 
 
 def save_summary_table(results: Dict[str, IntentResult], out_dir: str) -> None:
@@ -563,11 +569,17 @@ def save_action_distribution_table(results: Dict[str, IntentResult], out_dir: st
 
 def save_sedm_table(out_dir: str) -> None:
     """Save the SEDM as a human-readable CSV for the thesis appendix."""
+    sedm = MatrixPolicy.get_matrix()
+    band_names = [
+        f"Low_(<{ESC_LOW_THRESHOLD})",
+        f"Medium_({ESC_LOW_THRESHOLD}-{ESC_HIGH_THRESHOLD})",
+        f"High_(>={ESC_HIGH_THRESHOLD})",
+    ]
     rows = []
     for stage in KillChainStage:
         row = {"Stage": stage.name}
-        for band_idx, band_name in enumerate(["Low_(<0.35)", "Medium_(0.35-0.65)", "High_(>=0.65)"]):
-            row[band_name] = _SEDM[int(stage)][band_idx].name
+        for band_idx, band_name in enumerate(band_names):
+            row[band_name] = sedm[int(stage)][band_idx]
         rows.append(row)
     df   = pd.DataFrame(rows)
     path = os.path.join(out_dir, "sedm_table.csv")
@@ -594,6 +606,16 @@ def evaluate(
     honeypot     = DummyHoneypot(audit_file=shared_audit, verbose=False)
     results: Dict[str, IntentResult] = {}
 
+    # Load the classifier once — it's intent-independent, so reuse it across
+    # every intent below instead of re-reading classifier.joblib each time.
+    shared_classifier = AttackClassifier()
+    clf_path = os.path.join("models", "classifier.joblib")
+    if os.path.exists(clf_path):
+        shared_classifier.load(clf_path)
+        print(f"[Defender] Classifier loaded from {clf_path}")
+    else:
+        print(f"[Defender] Warning: Classifier not found at {clf_path}")
+
     print(f"\n{'='*65}")
     print(f"  HoneyIQ SEDM — Comprehensive Policy Evaluation")
     print(f"  Episodes per intent : {n_episodes}")
@@ -613,6 +635,7 @@ def evaluate(
             out_dir       = out_dir,
             honeypot      = honeypot,
             benign_ratio  = benign_ratio,
+            classifier    = shared_classifier,
         )
         results[intent.name] = res
         print(f"  Reward={res.mean_reward:+.2f}±{res.std_reward:.2f}  "

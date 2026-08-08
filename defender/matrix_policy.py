@@ -1,61 +1,12 @@
 """
 Stage-Escalation Decision Matrix (SEDM) — deterministic honeypot policy.
 
-Replaces the DQN with an interpretable, probabilistic decision matrix that
-maps a session's current kill chain position and escalation risk to the
-optimal honeypot action.
-
-Algorithm
----------
-1. **Escalation risk** — query the Markov chain TransitionModel for the
-   probability of advancing to a *strictly more dangerous* kill chain stage:
-
-       esc_risk = Σ P(next_stage = s') for all s' > current_stage
-
-2. **Escalation band** — discretise esc_risk into three bands:
-       Low    :  esc_risk < ESC_LOW_THRESHOLD   (0.35)
-       Medium :  esc_risk < ESC_HIGH_THRESHOLD  (0.65)
-       High   :  esc_risk ≥ ESC_HIGH_THRESHOLD
-
-3. **Matrix lookup** — read the base action from the 7×3 SEDM:
-
-       SEDM[current_stage][band] → base_action
-
-       Stage / Band         | Low    | Medium | High
-       ---------------------|--------|--------|-------
-       RECONNAISSANCE       | ALLOW  | LOG    | LOG
-       WEAPONIZATION        | LOG    | LOG    | TROLL
-       DELIVERY             | LOG    | TROLL  | TROLL
-       EXPLOITATION         | TROLL  | BLOCK  | BLOCK
-       INSTALLATION         | BLOCK  | BLOCK  | ALERT
-       COMMAND_AND_CTRL     | BLOCK  | ALERT  | ALERT
-       ACTIONS_ON_OBJ       | ALERT  | ALERT  | ALERT
-
-4. **Override rules** (applied in order after matrix lookup):
-
-       R1 — Normal traffic:
-            AttackType.NORMAL → ALLOW (always, regardless of matrix)
-
-       R2 — Rapidly-spreading / high-impact attack types:
-            AttackType ∈ {DOS, WORMS} → upgrade action by one level
-
-       R3 — High attack frequency:
-            escalation_rate > RATE_THRESHOLD (0.80) → upgrade action by one level
-
-       Action upgrade order: ALLOW → LOG → TROLL → BLOCK → ALERT
-
-5. **Composite risk score** (logged for analysis; does not change the action):
-
-       risk = 0.35 × stage_weight
-            + 0.35 × escalation_risk
-            + 0.15 × attack_severity
-            + 0.15 × escalation_rate
-
-Intent-awareness
-----------------
-The TransitionModel is intent-specific; the escalation risk therefore differs
-across STEALTHY / AGGRESSIVE / TARGETED / OPPORTUNISTIC intents.  The correct
-intent is decoded from the 24-dim state vector (bits [20:24]).
+Replaces the DQN with an interpretable decision matrix: escalation risk
+(from the intent-specific Markov TransitionModel) buckets into a Low/Medium/
+High band, the band and kill-chain stage index into `_SEDM` for a base
+action, and R1-R3 override rules (see `_apply_overrides`) adjust it. See
+`get_matrix()` for the resulting table and `_composite_risk` for the logged
+(non-action-affecting) risk score.
 """
 
 from __future__ import annotations
@@ -101,15 +52,6 @@ _SEDM: list[list[HoneypotAction]] = [
     [HoneypotAction.BLOCK, HoneypotAction.BLOCK, HoneypotAction.ALERT ],  # INSTALLATION
     [HoneypotAction.BLOCK, HoneypotAction.ALERT, HoneypotAction.ALERT ],  # COMMAND_AND_CTRL
     [HoneypotAction.ALERT, HoneypotAction.ALERT, HoneypotAction.ALERT ],  # ACTIONS_ON_OBJ
-]
-
-# Action upgrade sequence (R2 / R3 overrides step one level forward)
-_UPGRADE_ORDER: list[HoneypotAction] = [
-    HoneypotAction.ALLOW,
-    HoneypotAction.LOG,
-    HoneypotAction.TROLL,
-    HoneypotAction.BLOCK,
-    HoneypotAction.ALERT,
 ]
 
 # Attack types that trigger R2 (R2_TYPES)
@@ -197,31 +139,13 @@ class MatrixPolicy:
         if intent is None:
             intent = self._default_intent
 
-        # ------------------------------------------------------------------
-        # Step 1: Compute escalation risk from intent-specific Markov chain
-        # ------------------------------------------------------------------
         esc_risk = self._escalation_risk(current_stage, intent)
-
-        # ------------------------------------------------------------------
-        # Step 2: Band classification
-        # ------------------------------------------------------------------
         band = self._escalation_band(esc_risk)
-
-        # ------------------------------------------------------------------
-        # Step 3: Matrix lookup
-        # ------------------------------------------------------------------
         base_action = _SEDM[int(current_stage)][band]
-
-        # ------------------------------------------------------------------
-        # Step 4: Override rules
-        # ------------------------------------------------------------------
         action, override_applied = self._apply_overrides(
             base_action, current_attack, escalation_rate
         )
-
-        # ------------------------------------------------------------------
-        # Step 5: Composite risk score (for logging / analysis only)
-        # ------------------------------------------------------------------
+        # Logged for analysis only — does not affect the chosen action.
         composite_risk = self._composite_risk(
             current_stage, esc_risk, current_attack, escalation_rate
         )
@@ -238,13 +162,7 @@ class MatrixPolicy:
             "composite_risk":   round(composite_risk, 4),
         }
 
-        log.debug(
-            "SEDM: stage=%-18s band=%-6s esc=%.3f rate=%.3f "
-            "base=%-5s override=%s → %s",
-            current_stage.name, ["LOW", "MED", "HIGH"][band],
-            esc_risk, escalation_rate,
-            base_action.name, override_applied, action.name,
-        )
+        log.debug("SEDM: %s", info)
 
         return action, info
 
@@ -256,6 +174,11 @@ class MatrixPolicy:
     def get_matrix() -> list[list[str]]:
         """Return the SEDM as a list-of-lists of action names."""
         return [[a.name for a in row] for row in _SEDM]
+
+    @staticmethod
+    def get_matrix_actions() -> list[list[HoneypotAction]]:
+        """Return the SEDM as a list-of-lists of raw HoneypotAction values."""
+        return [list(row) for row in _SEDM]
 
     @staticmethod
     def get_full_matrix_for_intent(
@@ -310,9 +233,8 @@ class MatrixPolicy:
 
     @staticmethod
     def _upgrade(action: HoneypotAction) -> HoneypotAction:
-        """Advance action one level in severity."""
-        idx = _UPGRADE_ORDER.index(action)
-        return _UPGRADE_ORDER[min(idx + 1, len(_UPGRADE_ORDER) - 1)]
+        """Advance action one level in severity, clamped at ALERT."""
+        return HoneypotAction(min(int(action) + 1, HoneypotAction.ALERT))
 
     def _apply_overrides(
         self,
