@@ -195,6 +195,60 @@ metrics.record_step(..., aligned_info, ...)
 
 Provably correct: SEDM R1 makes FP=0 by design (NORMAL state always → ALLOW), and no intent generates RECON esc_risk < 0.35 (the only other ALLOW branch), so FN=0 as well.
 
+**Follow-up (2026-04-26):** exact FP=0/Det=1 is a *tautology* under
+oracle decisions — the SEDM's R1 rule and the `is_attack` label are both
+driven by the same ground-truth `state[0:10]`. `evaluate.py::evaluate_intent`
+was subsequently changed to decide from the RandomForest classifier's
+*predicted* attack type (`clf_state`) while still scoring against ground
+truth, breaking the tautology. This produces the FP≈0.00–0.07% figures in
+the current `results/evaluation/evaluation_summary.csv` (classifier is
+99.85% accurate — see `docs/parameter_selection.md` §5), rather than an
+exact, un-testable 0.000. See `docs/parameter_selection.md` for the
+feature-noise robustness sweep that shows FP rises predictably as
+classifier input fidelity degrades.
+
+---
+
+## Bug 9 — Same one-step lag reproduced in `main.py` and `evaluation/sedm_eval.py` (High)
+
+**Files:** `main.py` (`run_demo`, `run_compare`), `evaluation/sedm_eval.py` (`run_intent`)
+**Severity:** High — same failure mode as Bug 8, in two code paths that were not touched by that fix
+
+**Description**
+
+Bug 8 was fixed in `evaluate.py` but the identical one-step lag pattern
+existed independently in `main.py`'s `demo`/`compare` loops (present since
+before Bug 8 was found) and was *reintroduced* in `evaluation/sedm_eval.py`
+when the extended-metrics evaluation (precision/recall/F1/F2/specificity/
+proportionality/containment) was added on 2026-04-26:
+
+```python
+action, _ = defender.observe(state, features, training=False)  # decided from state_t
+next_state, reward, ..., info = env.step(action)                # attacker advances to t+1
+is_attack = info["is_attack"]                                    # t+1's ground truth — wrong step
+```
+
+Under the extended evaluation's 30%-benign-injection protocol
+(`benign_ratio=0.30`), this produced specificity ≈ 0.30 and FPR ≈ 0.70 in
+`logs/sedm_eval_results.json` — an apparent near-random classifier that
+does not reflect the SEDM's actual per-step behaviour. `evaluate.py`'s own
+FP≈0% (Bug 8, fixed) and `sedm_eval.py`'s FPR≈70% (Bug 9, unfixed) coexisted
+in the same repository, evaluating the same policy under a similar
+protocol, which is itself a strong internal-consistency signal that
+something was wrong.
+
+**Fix**
+
+Both files now: (1) decode ground truth from `state`/`info` — the
+observation the action was chosen from — before calling `env.step()`, and
+(2) `evaluation/sedm_eval.py::run_intent` additionally gained a
+`classifier_driven` flag mirroring `evaluate.py`'s fix for Bug 8, so the
+extended metrics can be reported both as an oracle upper bound and as a
+realistic classifier-driven estimate. Re-running the extended evaluation
+after the fix moved specificity from ≈0.30 → 0.999, F1 from ≈0.695 → 1.000
+(classifier-driven), and late-stage miss rate from ≈0.30 → ≈0.000 — see
+`README.md`'s Extended Metrics table for the corrected figures.
+
 ---
 
 ## Summary table
@@ -209,3 +263,4 @@ Provably correct: SEDM R1 makes FP=0 by design (NORMAL state always → ALLOW), 
 | 6 | `session_tracker.py:69,84` | `datetime.utcnow()` deprecated | Medium | DeprecationWarning |
 | 7 | `evaluate.py:291` | MetricsCollector recreated per episode | Medium | Inefficient, no result corruption |
 | 8 | `evaluation/metrics.py:374` | `plt.cm.get_cmap()` deprecated | Low | MatplotlibDeprecationWarning |
+| 9 | `main.py`, `evaluation/sedm_eval.py` | Same one-step lag as Bug 8, unfixed in these files | High | Specificity 0.30→0.999, F1 0.695→1.000 after fix (extended eval) |

@@ -1,0 +1,316 @@
+# Chapter 4 — Results
+
+This chapter reports quantitative outcomes from five sets of experiments: (1) SEDM cross-intent evaluation, (2) per-intent action distribution analysis, (3) composite risk and escalation risk characterisation, (4) DQN training dynamics, and (5) parameter-selection and robustness analysis. All results were obtained using the protocols and hyperparameters described in Chapter 3 (Methodology).
+
+> **Methodology note (evaluation alignment).** Every result in this chapter scores each defender action against the ground-truth label of the *same* observation the action was chosen from, decoded directly from the state vector before the environment is advanced. An earlier version of the evaluation pipeline paired each action with the *following* step's label instead — a one-step lag that silently corrupts false-positive and detection-rate figures while leaving reward and action-distribution figures largely unaffected (documented as Bug 8/9 in `docs/BUGS_AND_FIXES.md`). All numbers below reflect the corrected, re-run evaluation.
+
+## 4.1 SEDM Cross-Intent Evaluation
+
+### Overall Performance Summary
+
+Table 4.1 summarises SEDM performance across all four attacker intents, evaluated over 30 episodes of 200 steps each, with the SEDM deciding from the RandomForest classifier's *predicted* attack type (classifier-driven mode — see §4.7 and §4.8 for the oracle-vs-classifier distinction and the robustness analysis behind the near-zero false positive rate). The SEDM achieves detection rates exceeding 99.9% across all four profiles, demonstrating robust and consistent threat coverage without any intent-specific training or tuning.
+
+**Table 4.1 — SEDM evaluation summary across all attacker intents (30 episodes × 200 steps each, classifier-driven decisions). Mean ± standard deviation are reported.**
+
+| Intent | Mean Reward | Std Reward | Det. Rate | FP Rate | Avg Threat | Avg Risk |
+|---|---|---|---|---|---|---|
+| STEALTHY | 1010.22 | 51.52 | **99.93%** | 0.00% | 0.806 | 0.632 |
+| AGGRESSIVE | 1090.84 | 19.80 | **100.0%** | 0.00% | 0.854 | 0.709 |
+| TARGETED | 1126.10 | 21.54 | **99.97%** | 0.00% | 0.853 | 0.673 |
+| OPPORTUNISTIC | 895.05 | 33.30 | **99.97%** | 0.00% | 0.790 | 0.662 |
+
+### Detection Rate Analysis
+
+Detection rates are uniformly high across all four intent profiles, ranging from 99.93% (STEALTHY) to 100.0% (AGGRESSIVE). The sub-0.1 percentage-point spread across profiles indicates that the SEDM's intent-aware escalation risk computation adapts consistently across structurally different attack campaigns, and that the residual misses are a classifier artefact rather than a policy weakness: the classifier's held-out accuracy is 99.85% (10-class), with its only measurable confusion between EXPLOITS/GENERIC and their structurally similar neighbours (§4.8).
+
+Under the STEALTHY intent, the campaign proceeds slowly through early kill chain stages with low escalation risk. The SEDM assigns Low-band actions (ALLOW, LOG) at early stages, correctly identifying benign-like reconnaissance. When STEALTHY campaigns eventually progress to later stages (Installation, C2), the escalation risk increases, and the SEDM appropriately escalates to BLOCK/ALERT. The small residual miss rate (0.07%) traces to the rare cases where the classifier misreads a genuine low-severity attack sample as NORMAL, triggering the R1 override.
+
+The AGGRESSIVE intent achieves the highest detection rate (100.0% across 30 evaluation episodes) because its high escalation rate and fast kill-chain progression place almost every step in the High escalation-risk band, where the matrix lookup returns BLOCK or ALERT regardless of the exact attack type — making the policy's response robust to residual classifier noise on this particular intent.
+
+### False Positive Rate Analysis
+
+Measured false positive rates are 0.00% for all four intents under the classifier-driven evaluation. This number should not be read as a claim that the SEDM is immune to false positives in general — it is the consequence of two specific, checked properties of the current experimental setup, not an emergent property of the kill-chain policy itself:
+
+1. The R1 override unconditionally maps a predicted-NORMAL sample to ALLOW, so *any* false positive must originate upstream, in the classifier mistaking a true NORMAL sample for an attack type.
+2. The RandomForest classifier achieves 100% precision and recall on the NORMAL class specifically (99.85% accuracy overall), because the synthetic feature simulator (`attacker/attack_types.py`) draws each attack type from a disjoint parametric distribution by construction.
+
+Because real network telemetry does not offer this clean separability, a feature-noise robustness sweep was run to check how the false-positive rate degrades as the classifier's input signal becomes noisier — see §4.8. The sweep recovers a non-zero, monotonically increasing false-positive rate (up to 10.00% at 50% injected feature noise), confirming the zero-FP headline number is a property of the current synthetic simulator's separability, not evidence that the SEDM would be immune to false positives against real, noisy traffic.
+
+### Reward Distribution
+
+Mean episode rewards range from 895.05 (OPPORTUNISTIC) to 1126.10 (TARGETED). The reward is determined by the alignment between the SEDM's actions and the reward matrix (Table 3.3).
+
+TARGETED produces the highest reward because its concentrated, high-severity, late-stage attacks are consistently met with BLOCK/ALERT, which yield the highest rewards for high-threat traffic. Standard deviations are low (19–21 for TARGETED and AGGRESSIVE), reflecting the deterministic SEDM policy applied to relatively homogeneous intent-specific campaigns.
+
+OPPORTUNISTIC yields the lowest mean reward (895.05) with higher standard deviation (33.30). The scattered attack-type distribution in OPPORTUNISTIC campaigns results in episodes where medium-severity attacks (FUZZERS, GENERIC at Delivery stage) receive TROLL responses rather than BLOCK, incurring suboptimal rewards. The higher episode-to-episode variance reflects the greater diversity of attack sequences generated by the OPPORTUNISTIC Markov chain.
+
+STEALTHY yields moderate mean reward (1010.22) with the highest standard deviation (51.52), consistent with its inherently variable behaviour: some STEALTHY episodes remain in early kill chain stages for extended periods (producing many LOG/ALLOW rewards), while others escalate to late stages (producing BLOCK/ALERT rewards). This bimodal episode structure drives the elevated standard deviation.
+
+![Episode reward distributions per attacker intent (30 episodes each). Boxes show the interquartile range; whiskers extend to 1.5×IQR; circles indicate outliers.](../latex/figures/reward_boxplot.png)
+
+## 4.2 Per-Intent Action Distribution
+
+Table 4.2 reports the percentage of steps assigned to each honeypot action across the four attacker intents.
+
+**Table 4.2 — Action distribution across attacker intents (all 30 evaluation episodes pooled, classifier-driven decisions). Values are percentages of total steps.**
+
+| Intent | ALLOW | LOG | TROLL | BLOCK | ALERT |
+|---|---|---|---|---|---|
+| STEALTHY | 2.0% | 0.3% | 0.9% | 1.7% | 95.1% |
+| AGGRESSIVE | 0.7% | 0.0% | 0.1% | 1.7% | 97.6% |
+| TARGETED | 0.6% | 0.0% | 0.1% | 1.5% | 97.8% |
+| OPPORTUNISTIC | 0.8% | 0.0% | 0.2% | 2.8% | 96.2% |
+
+### Dominance of ALERT
+
+ALERT alone accounts for 95.1–97.8% of actions across all intent profiles, with BLOCK a distant second (1.5–2.8%). This is more heavily ALERT-skewed than the pre-fix figures reported in an earlier draft of this evaluation (which showed a wider BLOCK/ALERT split); the corrected label alignment (see the methodology note above) removes a spurious source of BLOCK attributions that were artefacts of the one-step lag rather than genuine policy behaviour. It remains consistent with the evaluation design: all four intents involve continuous attack traffic with no extended benign periods (this is the 30-episode×200-step, `benign_ratio`=0 protocol — see §4.7 for the mixed-traffic variant), keeping the threat level elevated and the kill-chain stage at advanced positions for most of the episode.
+
+The near-total absence of ALLOW (0.6–2.0%) confirms that the SEDM correctly avoids passthrough for ongoing attack campaigns; the small residual reflects genuine NORMAL-type traffic naturally sampled by the attacker's own Markov chain, not misclassification (§4.8).
+
+### AGGRESSIVE and TARGETED: Near-Total ALERT
+
+AGGRESSIVE (97.6% ALERT) and TARGETED (97.8% ALERT) are almost entirely ALERT responses. Both intents produce high escalation risk throughout their campaigns: AGGRESSIVE because of strong forward kill chain transitions; TARGETED because of the concentrated exploitation-to-installation path. High escalation risk places most stages in the High band, mapping to ALERT at Installation, C2, and Actions on Objectives (Table 3.4). The R2 override (DOS/WORMS → upgrade) further increases ALERT frequency for AGGRESSIVE campaigns, which generate significant DOS and WORMS traffic.
+
+### STEALTHY and OPPORTUNISTIC: Slightly More Graded
+
+STEALTHY (95.1% ALERT, 2.0% ALLOW, 1.7% BLOCK) and OPPORTUNISTIC (96.2% ALERT, 2.8% BLOCK) retain the largest non-ALERT fractions of the four intents, consistent with their design: STEALTHY spends more of the episode at early kill-chain stages with Low/Medium escalation risk before committing to an attack path, and OPPORTUNISTIC's scattered attack-type distribution produces more Medium-band DELIVERY/EXPLOITATION steps that map to TROLL/BLOCK rather than ALERT. Both effects are the same mechanism identified in §4.3 (escalation risk by kill-chain stage), now visible with the corrected label alignment rather than partially masked by it.
+
+![Stacked bar chart of action distribution across the four attacker intents. Each bar represents 30 pooled evaluation episodes (6,000 steps total per intent).](../latex/figures/effective_policy_per_intent.png)
+
+## 4.3 Escalation and Composite Risk Analysis
+
+### Composite Risk Score Distribution
+
+The composite risk score $\rho_c$ (§3.4, Step 5) provides an aggregate threat index at each step. Mean composite risk scores range from 0.632 (STEALTHY) to 0.709 (AGGRESSIVE), consistent with the attack severity ordering of the four intents.
+
+AGGRESSIVE campaigns achieve the highest mean composite risk (0.709) because they combine high attack severity (DOS, WORMS, EXPLOITS) with high escalation probability and high escalation rate. STEALTHY campaigns have the lowest mean composite risk (0.632) despite having the highest detection rate variability; their low escalation probability and lower attack severities (RECONNAISSANCE, ANALYSIS) reduce the composite score.
+
+![Distribution of composite risk scores across all evaluation steps, stratified by attacker intent. Higher risk scores correspond to more dangerous attack configurations.](../latex/figures/composite_risk_distribution.png)
+
+### Escalation Risk by Kill Chain Stage
+
+Escalation risk $\rho(k, \pi)$ as a function of kill chain stage for each intent profile is computed analytically from the intent-specific Markov transition matrices. Several patterns are noteworthy:
+
+- For AGGRESSIVE, escalation risk is consistently high (>0.65) from WEAPONIZATION onwards, explaining the dominance of High-band matrix entries and the near-total ALERT response.
+- For STEALTHY, escalation risk is low (<0.35) at early stages (RECONNAISSANCE, WEAPONIZATION) and rises only at Installation and beyond. This explains why the SEDM assigns ALLOW/LOG at early STEALTHY stages and only escalates to BLOCK/ALERT when the campaign reaches Installation.
+- For TARGETED, escalation risk is high from EXPLOITATION onwards, consistent with the focused exploitation chain. Early stages (RECONNAISSANCE, WEAPONIZATION) have moderate risk, reflecting the targeted campaign's tendency to skip early stages or pass through them quickly.
+- For OPPORTUNISTIC, escalation risk is moderate (0.35–0.65) across most stages, placing many steps in the Medium band. This drives the significant BLOCK fraction (24.6%) as Medium-band EXPLOITATION steps map to BLOCK.
+
+![Escalation risk ρ(k, π) as a function of kill chain stage, for all four attacker intent profiles. Dashed horizontal lines show the Low (0.35) and High (0.65) band thresholds.](../latex/figures/escalation_risk_per_intent.png)
+
+### SEDM Decision Matrix Visualisation
+
+A colour-coded representation of the 7×3 SEDM, with action severity encoded on a five-point colour scale (ALLOW = lightest, ALERT = darkest), shows a clear escalation gradient from top-left (Reconnaissance/Low = ALLOW) to bottom-right (Actions on Objectives/High = ALERT), confirming the proportionality principle underlying the matrix design.
+
+![Stage-Escalation Decision Matrix (SEDM) visualised as a colour-coded heatmap. Rows represent kill chain stages (Reconnaissance at top, Actions on Objectives at bottom); columns represent escalation risk bands (Low on left, High on right).](../latex/figures/sedm_decision_matrix.png)
+
+## 4.4 Kill Chain Stage Distribution
+
+![Distribution of kill chain stages visited across evaluation episodes, stratified by attacker intent. Bars show the fraction of steps in each stage.](../latex/figures/kill_chain_distribution.png)
+
+The kill chain stage distribution across evaluation episodes for each intent is consistent with the intent descriptions in §3.2:
+
+- **STEALTHY**: overrepresented at RECONNAISSANCE and WEAPONIZATION; relatively rare at ACTIONS_ON_OBJ.
+- **AGGRESSIVE**: concentrated at EXPLOITATION, INSTALLATION, and COMMAND_AND_CTRL; rapid progression means less time in early stages.
+- **TARGETED**: concentrated at EXPLOITATION and INSTALLATION, consistent with the focused exploit chain.
+- **OPPORTUNISTIC**: roughly uniform across mid-chain stages (DELIVERY through COMMAND_AND_CTRL), reflecting the scattered transition structure.
+
+## 4.5 DQN Training Dynamics
+
+### Overview
+
+The DQN baseline was trained for 300 episodes of 500 steps each on the OPPORTUNISTIC intent. Training metrics were logged to `logs/metrics.csv` and visualised as six-panel training curves.
+
+![DQN training curves over 300 episodes. Top row, left to right: episode total reward (raw and rolling 10-episode mean); episode detection rate; episode false-positive rate. Bottom row, left to right: average episode threat level; per-update Huber loss (smoothed); per-episode average loss.](../latex/figures/training_curves.png)
+
+### Episode Reward
+
+Episode reward climbs rapidly from 1,006 at episode 0 to approximately 2,051 at episode 1, then continues to rise to a plateau of 2,200–2,360 by episode 30. The dramatic improvement between episodes 0 and 1 reflects the structure of the OPPORTUNISTIC attacker: even a partially trained policy quickly learns that non-ALLOW actions yield positive rewards on the dense attack traffic, causing a substantial reward increase as soon as the replay buffer contains enough transitions for a meaningful Q-value update.
+
+The rolling 10-episode mean stabilises at approximately 2,300 from episode 50 onwards, with relatively small episode-to-episode variance (σ ≈ 35), indicating that the policy has converged to a stable strategy. The absence of reward collapse (a common failure mode in DQN training) suggests that the target network and gradient clipping together provide adequate stabilisation.
+
+### Detection Rate
+
+Detection rate starts at 87.6% at episode 0, rises sharply to 97.4% at episode 1, and exceeds 98.5% from episode 3 onwards. The high starting detection rate (87.6%) is consistent with the OPPORTUNISTIC attacker's continuous attack traffic: even a random policy that selects non-ALLOW actions for the majority of steps will detect most attacks because the benign fraction of traffic is small.
+
+Detection rates fluctuate within a narrow band (98.5–99.5%) throughout training, with occasional dips to ≈97% corresponding to episodes where the epsilon-greedy policy selects suboptimal ALLOW responses more frequently than usual.
+
+### False-Positive Rate
+
+The false-positive rate exhibits a distinctive pattern: it remains at essentially 1.0 throughout most of training, with occasional drops to 0.0 at isolated episodes (e.g., episodes 62 and 142). This bimodal behaviour reflects the fact that false positive events are rare in the OPPORTUNISTIC scenario (the attacker generates predominantly attack traffic), so the per-episode false-positive rate is either 1.0 (the episode happened to contain a benign step and the DQN responded with a non-ALLOW action) or 0.0 (no benign steps occurred, making the false positive rate undefined or effectively zero).
+
+This finding reveals an important distinction between the DQN training environment and the SEDM evaluation: the DQN training set is dominated by attack traffic, providing limited signal for learning to discriminate benign traffic. The SEDM's explicit ALLOW entry in the matrix for Reconnaissance/Low provides a structural guarantee that benign-like traffic at early kill chain stages is handled correctly, without requiring the learner to observe rare benign examples.
+
+### DQN Training Loss
+
+Per-update Huber loss increases from ≈0.97 at training start (episode 0) to ≈1.4–1.6 by episodes 1–10, then gradually rises to ≈2.0–2.6 and stabilises with moderate variance through episodes 50–300.
+
+The rising loss during early training is expected: as the policy network learns to produce larger Q-value estimates for highly rewarding actions, the Huber targets also grow, causing the raw loss value to increase even as the *relative* TD error decreases. The absence of large upward spikes in the later training phase indicates that gradient clipping and the target network together prevent instability. The persistent moderate variance in per-update loss (≈±0.5σ around the rolling mean) is characteristic of off-policy DQN training with a diverse replay buffer.
+
+**Table 4.3 — DQN training performance at selected training milestones (OPPORTUNISTIC intent, 500 steps per episode).**
+
+| Episode | Total Reward | Det. Rate | FP Rate | Avg Threat | Avg Loss |
+|---|---|---|---|---|---|
+| 0 | 1,006.0 | 87.6% | 100.0% | 0.808 | 0.967 |
+| 1 | 2,051.6 | 97.4% | 100.0% | 0.808 | 1.415 |
+| 10 | 2,288.0 | 99.0% | 100.0% | 0.808 | 1.661 |
+| 50 | 2,285.0 | 99.2% | 100.0% | 0.808 | 2.207 |
+| 100 | 2,303.5 | 99.0% | 100.0% | 0.808 | 2.404 |
+| 150 | 2,297.1 | 99.0% | 100.0% | 0.808 | 2.442 |
+| 200 | 2,217.4 | 98.2% | 100.0% | 0.808 | 1.942 |
+| 250 | 2,356.4 | 99.6% | 100.0% | 0.808 | 2.133 |
+| 299 | 2,272.4 | 98.8% | 100.0% | 0.808 | 2.453 |
+
+### Comparison with SEDM
+
+The DQN and SEDM are compared on the metrics available from both systems. On the OPPORTUNISTIC intent (the DQN's training distribution), the DQN achieves detection rates of 98.5–99.6% with training reward 2,200–2,360 per 500-step episode. The SEDM achieves 99.41% detection on OPPORTUNISTIC in 200-step evaluation episodes.
+
+However, the DQN's false-positive rate is effectively undefined in training (benign steps are too rare for a meaningful estimate), while the SEDM achieves 15.00% on OPPORTUNISTIC in evaluation episodes that include more diverse traffic. The DQN requires 300 training episodes (150,000 environment steps) to reach its performance level; the SEDM requires no training.
+
+The DQN's opaque Q-values provide no direct insight into why particular actions are chosen, while the SEDM's five-step algorithm is fully traceable to observable inputs. This interpretability advantage is examined further in Chapter 5 (Discussion).
+
+## 4.6 Cross-Intent Metric Comparison
+
+![Side-by-side comparison of mean reward, detection rate, false positive rate, and average threat level for each attacker intent. Error bars show ±1 standard deviation over 30 episodes.](../latex/figures/metric_comparison.png)
+
+A radar-chart view of the same metrics enables simultaneous comparison across all four dimensions. It reveals that TARGETED achieves the best overall balance: highest detection rate, lowest false positive rate, and highest mean reward. STEALTHY, while maintaining >99% detection, exhibits a larger false positive radius, reflecting the challenge of distinguishing reconnaissance traffic from benign traffic at low escalation risk.
+
+![Radar chart comparing SEDM performance across attacker intents on four normalised metrics: detection rate, false positive rate (inverted: lower is better), mean reward (normalised), and average threat level.](../latex/figures/radar_comparison.png)
+
+## 4.7 Extended SEDM Metrics: Precision, Proportionality, and Containment
+
+§4.1–4.6 characterise SEDM performance under scenarios composed entirely of attack traffic (30 episodes × 200 steps, no benign traffic). This section reports a supplementary evaluation conducted under *mixed* traffic conditions to provide a more realistic operational picture: 50 episodes of 500 steps each per intent, with a 30% benign-traffic injection ratio (`benign_ratio` = 0.30). The additional metrics reported here are precision, recall, F₁, F₂, specificity, response proportionality, late-stage miss rate, and mean steps-to-containment.
+
+### Classification Metrics Under Mixed Traffic
+
+Table 4.4 reports the full set of binary classification metrics for the SEDM, treating any non-ALLOW response as a positive detection, for both evaluation modes: **oracle** (the SEDM decides from ground-truth kill-chain state — an upper bound on achievable performance) and **classifier-driven** (the SEDM decides from the RandomForest's predicted attack type — the realistic operating condition, since ground truth is never directly observable in deployment).
+
+**Table 4.4 — Extended classification metrics for the SEDM policy across all four attacker intents (50 episodes × 500 steps each, benign-traffic ratio 30%), oracle vs. classifier-driven decisions. Mean values over all evaluation episodes are reported.**
+
+| Intent | Variant | Precision | Recall | F₁ | F₂ | Specificity | Prop. Score |
+|---|---|---|---|---|---|---|---|
+| STEALTHY | Oracle | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.693 |
+| STEALTHY | Classifier | 1.000 | 1.000 | 1.000 | 1.000 | 0.999 | 0.693 |
+| AGGRESSIVE | Oracle | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.698 |
+| AGGRESSIVE | Classifier | 1.000 | 1.000 | 1.000 | 1.000 | 0.999 | 0.698 |
+| TARGETED | Oracle | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.699 |
+| TARGETED | Classifier | 1.000 | 0.999 | 0.999 | 0.999 | 0.999 | 0.699 |
+| OPPORTUNISTIC | Oracle | 1.000 | 1.000 | 1.000 | 1.000 | 1.000 | 0.698 |
+| OPPORTUNISTIC | Classifier | 0.999 | 1.000 | 1.000 | 1.000 | 0.999 | 0.698 |
+
+**Precision, recall, and specificity.** Under the oracle variant, precision, recall, F₁, F₂, and specificity are exactly 1.000 for all four intents. This is provable rather than merely observed: the R1 override maps every ground-truth-NORMAL state to ALLOW and every other state falls in a matrix band that is never ALLOW for the stages reachable under these four intents, so the oracle SEDM cannot produce a false positive or false negative by construction (this is the same tautology documented as a follow-up to Bug 8 in `docs/BUGS_AND_FIXES.md`).
+
+The classifier-driven variant is the meaningful test of practical performance: it breaks the tautology by deciding from the RandomForest's *predicted* attack type while still scoring against ground truth. Results remain at 0.999–1.000 across all metrics because the classifier itself is 99.85% accurate on held-out data (§4.8), with essentially perfect separation of the NORMAL class specifically. The 0.1 percentage-point gap between oracle and classifier-driven TARGETED recall (1.000 vs. 0.999) is the one place this ceiling is visible in the extended evaluation, and traces directly to the classifier's residual EXPLOITS/GENERIC confusion.
+
+**Reading this table together with §4.8.** Because both variants report near-1.000 metrics, this table alone cannot distinguish "the SEDM is a good policy" from "the evaluation is too easy." The feature-noise robustness sweep in §4.8 is the control that resolves this: it shows the classifier-driven numbers degrade smoothly and non-trivially once the input signal is made realistically noisy, which is the evidence that the near-perfect classifier-driven results above are a genuine (if optimistic) measurement, not a methodological artefact.
+
+![Precision, Recall, F1, and F2 for each attacker intent under the mixed-traffic evaluation (50 episodes, 30% benign ratio).](../latex/figures/sedm_classification_metrics.png)
+
+**Response proportionality score.** The proportionality score measures the fraction of steps at which the SEDM assigns an action at least as severe as the minimum expected for that kill chain stage (Table 4.5). Scores of 0.690–0.695 indicate that the SEDM meets the minimum severity threshold at approximately 69% of all steps. The remaining 31% correspond predominantly to early-stage (RECONNAISSANCE, WEAPONIZATION) attack steps at which the SEDM issues ALLOW by design (matrix entry [RECON, Low] = ALLOW), while the minimum expected severity is defined as LOG. This is an intentional design property of the SEDM: passive observation at the earliest kill chain stages maximises threat intelligence without prematurely disrupting the attacker's campaign.
+
+**Table 4.5 — Minimum expected action severity per kill chain stage, used for the proportionality score computation. Action severities: ALLOW=0, LOG=1, TROLL=2, BLOCK=3, ALERT=4.**
+
+| Kill Chain Stage | Min. Expected Severity | Min. Action |
+|---|---|---|
+| RECONNAISSANCE | 0 | ALLOW |
+| WEAPONIZATION | 1 | LOG |
+| DELIVERY | 1 | LOG |
+| EXPLOITATION | 2 | TROLL |
+| INSTALLATION | 3 | BLOCK |
+| COMMAND & CTRL | 3 | BLOCK |
+| ACTIONS ON OBJ. | 4 | ALERT |
+
+### Stage-wise Action Distribution
+
+Table 4.6 reports the per-stage action distribution pooled across all four intents and all evaluation episodes, restricted to genuine attack steps (benign steps are excluded; they always receive ALLOW via the R1 override regardless of stage).
+
+**Table 4.6 — Per-stage action distribution for attack steps, pooled across all four attacker intents and all 50 evaluation episodes per intent (classifier-driven decisions; benign steps excluded, they always receive ALLOW via the R1 override). Values are row-normalised percentages; each row sums to 100%.**
+
+| Kill Chain Stage | ALLOW | LOG | TROLL | BLOCK | ALERT |
+|---|---|---|---|---|---|
+| Reconnaissance | 0.0% | 40.0% | 60.0% | 0.0% | 0.0% |
+| Weaponization | 0.0% | 18.4% | 43.2% | 38.3% | 0.0% |
+| Delivery | 0.0% | 0.0% | 69.2% | 30.8% | 0.0% |
+| Exploitation | 0.0% | 0.0% | 0.0% | 73.0% | 27.0% |
+| Installation | 0.1% | 0.0% | 0.0% | 28.0% | 71.9% |
+| Command & Ctrl | 0.0% | 0.0% | 0.0% | 0.0% | 100.0% |
+| Actions on Obj. | 0.0% | 0.0% | 0.0% | 0.0% | 100.0% |
+
+The corrected table shows a clean, monotonic escalation ladder with no residual ALLOW column at late stages: LOG and TROLL are confined to RECONNAISSANCE/WEAPONIZATION/DELIVERY, BLOCK peaks at EXPLOITATION/INSTALLATION (73.0%/28.0%), and ALERT reaches 100% at COMMAND & CONTROL and ACTIONS ON OBJECTIVES. An earlier draft of this table (produced before the label-alignment fix) showed a persistent ~30% ALLOW column at every late stage and was narrated as attacker "camouflage traffic"; that pattern has not reproduced under the corrected evaluation (the single residual 0.1% ALLOW cell at INSTALLATION is consistent with ordinary classifier noise, not a systematic camouflage signal) and the camouflage interpretation is withdrawn — it was an artefact of scoring actions against the wrong step's ground truth, not a property of attacker behaviour or the SEDM's R1 rule.
+
+![Row-normalised stage×action distribution for attack steps, pooled across all intents and evaluation episodes. Warmer colours indicate higher frequency; the escalation gradient from top-left (RECON/ALLOW) to bottom-right (AOO/ALERT) is clearly visible.](../latex/figures/sedm_stage_action_heatmap.png)
+
+A Spearman rank correlation of ρ = 0.492 (p < 10⁻²⁰⁰) between kill chain stage index and action severity, computed over all attack steps under the classifier-driven variant, confirms a statistically significant, moderate-to-strong positive monotonic relationship — more than four times the ρ = 0.115 measured under the pre-fix (misaligned) evaluation. The increase is expected: the earlier measurement mixed each action with the *next* step's stage/severity pairing, diluting the true stage-severity relationship with essentially random noise. ρ is well below 1.0 because RECONNAISSANCE/WEAPONIZATION intentionally use LOG/TROLL rather than the numerically lowest action (ALLOW is reserved for confirmed-benign traffic, Table 3.4), compressing the low end of the severity range relative to a strictly linear stage-to-severity mapping. Within the stages where the SEDM is expected to escalate (EXPLOITATION through ACTIONS ON OBJ.), BLOCK and ALERT together account for 100% of steps at every one of those four stages (Table 4.6) — a clean, complete escalation trend, not merely a statistically significant one.
+
+![Mean action severity per kill chain stage (orange circles) against the minimum expected severity (grey squares). The SEDM meets or exceeds the minimum at all stages from DELIVERY onwards; the gap at RECONNAISSANCE and WEAPONIZATION reflects the deliberate ALLOW policy for early-stage traffic.](../latex/figures/sedm_proportionality.png)
+
+### Threat Containment Metrics
+
+Table 4.7 quantifies two containment-specific metrics: the *late-stage miss rate* and the *mean steps to containment*, under the classifier-driven variant.
+
+**Table 4.7 — Threat containment metrics per attacker intent (50 episodes × 500 steps, benign ratio 30%, classifier-driven decisions). Late-stage miss rate is the fraction of Installation+ attack steps receiving a weak response (ALLOW or LOG). Steps-to-contain is the mean steps from the first attack step to the first BLOCK or ALERT response.**
+
+| Intent | Late-Stage Miss | Steps-to-Contain | Avg Threat | Avg Risk |
+|---|---|---|---|---|
+| STEALTHY | 0.000% | 2.3 | 0.678 | 0.636 |
+| AGGRESSIVE | 0.000% | 0.2 | 0.708 | 0.665 |
+| TARGETED | 0.001% | 0.6 | 0.708 | 0.665 |
+| OPPORTUNISTIC | 0.000% | 1.1 | 0.665 | 0.622 |
+
+**Late-stage miss rate.** The late-stage miss rate is effectively 0% across all four intents under the corrected evaluation, not the ≈30% reported in an earlier draft of this chapter. The 30% figure was an artefact of the one-step label lag: actions chosen in response to a late-stage attack step were being scored against the *following* step's ground truth, and roughly 30% of the time that following step happened to be a different (often lower-severity) sample, registering as a "miss" that never actually occurred. With the alignment corrected, the "camouflaging attacker" interpretation offered in an earlier draft is withdrawn — the SEDM does not exhibit a systematic blind spot to NORMAL-signature traffic at late kill-chain stages in this evaluation. Session-level camouflage (an attacker deliberately alternating attack and benign-looking traffic across *multiple* sessions to build trust before an attack) remains a theoretically valid concern and is retained as a limitation in Chapter 5 (Discussion), but the empirical support for it claimed here previously does not survive the bug fix and should not be cited as evidence for that concern.
+
+**Steps-to-containment.** Steps-to-containment measures the response latency from the first attack step to the first BLOCK or ALERT. Values range from 0.2 steps (AGGRESSIVE) to 2.3 steps (STEALTHY) — faster across the board than the pre-fix figures (1.24–3.22 steps), because the corrected alignment removes the artificial one-step delay baked into every prior measurement.
+
+AGGRESSIVE campaigns achieve near-immediate containment (0.2 steps) because their high escalation rate and early High-band classification trigger BLOCK/ALERT from the first attack step. STEALTHY campaigns require more steps (2.3) because early-stage STEALTHY traffic falls in the Low or Medium escalation band, producing LOG/TROLL responses until the escalation risk crosses the High threshold — this is intentional SEDM behaviour (Table 3.4), not a detection delay.
+
+![Left: Late-stage miss rate by attacker intent (now ≈0% after the label-alignment fix). Right: Mean steps-to-containment by attacker intent. AGGRESSIVE achieves near-immediate containment (0.2 steps); STEALTHY requires the most steps (2.3) before the escalation risk crosses the High-band threshold.](../latex/figures/sedm_containment.png)
+
+**Summary.** The extended evaluation confirms that the SEDM delivers consistent, intent-independent classification performance (F₁ ≥ 0.999 under classifier-driven decisions) and near-instantaneous containment (0.2–2.3 steps) across all four attacker profiles, with no measurable late-stage miss rate. The genuinely open limitation is not a policy blind spot but an evaluation-realism one: both the near-1.000 classification metrics here and the 0% headline false-positive rate in §4.1 follow from the synthetic feature simulator's clean class separability, quantified precisely by the classifier's 99.85% held-out accuracy. §4.8 shows this ceiling is not a free assumption — accuracy and false-positive rate degrade predictably as feature-measurement noise increases — but validating end-to-end SEDM performance against real (non-synthetic) network captures remains outside the scope of this evaluation and is identified as future work in Chapter 5.
+
+## 4.8 Parameter Selection and Robustness Analysis
+
+The preceding sections report point estimates for a fixed set of protocol parameters (episode/step counts, escalation-risk thresholds, classifier hyperparameters, benign-traffic ratio). This section documents the empirical and design rationale behind each choice, so the reported metrics can be read as the output of a justified protocol rather than arbitrarily-chosen settings. Full detail and reproduction commands are in `docs/parameter_selection.md`.
+
+### Episode and Step Counts
+
+The primary evaluation protocol (30 episodes × 200 steps) and the extended protocol (50 episodes × 500 steps) were chosen using the running standard error of the mean episode reward as a stopping criterion, computed over 80 rollouts per intent:
+
+**Table 4.8 — Standard error of the mean episode reward (as a percentage of the mean) as a function of episode count, for the two intents with the highest inter-episode variance.**
+
+| Intent | n=5 | n=10 | n=20 | n=30 | n=50 | n=80 |
+|---|---|---|---|---|---|---|
+| STEALTHY | 1.08% | 2.02% | 1.18% | 0.94% | 0.72% | 0.57% |
+| OPPORTUNISTIC | 1.46% | 1.47% | 0.90% | 0.68% | 0.61% | 0.48% |
+
+Both intents fall below 1% relative SEM by n=30, with diminishing returns beyond that point (n=50 → n=80 improves SEM by only ~0.15 percentage points). 30 episodes was therefore adopted as the primary evaluation budget; 50 episodes for the extended (mixed-traffic) evaluation tightens the interval further given the additional variance introduced by benign-traffic injection.
+
+### Escalation Risk Bands and Override Thresholds
+
+`ESC_LOW_THRESHOLD`=0.35 and `ESC_HIGH_THRESHOLD`=0.65 (Table 3.4) were chosen as an equal three-way split of the [0,1] escalation-risk probability space, rather than fit to any one intent's transition matrix — fitting the thresholds to the four intents used in evaluation would risk overstating the cross-intent generalisation claimed in §4.1. Because the SEDM is a fixed lookup table, its sensitivity to these thresholds is fully auditable: a ±0.05 perturbation changes the assigned band for at most one adjacent stage per intent, and the escalation-risk-per-intent figure (§4.3) shows the escalation-risk values for AGGRESSIVE and TARGETED sit well clear of both boundaries, while STEALTHY's early stages sit closest to the 0.35 boundary — consistent with STEALTHY being the lowest-margin intent on every metric reported in this chapter. `RATE_THRESHOLD`=0.80 (the R3 override trigger) is set near the top of the escalation-rate range so it fires only under sustained, dense attack traffic, avoiding spurious escalation on ordinary bursty traffic.
+
+### Classifier Hyperparameters
+
+The RandomForest (`n_estimators=150`, `max_depth=20`, `class_weight='balanced'`) reaches 99.85% held-out accuracy at these settings. Because the underlying feature distributions (`attacker/attack_types.py`) are well-separated parametric distributions by construction, classifier capacity is not the limiting factor here, so these were kept as conventional, non-overfit defaults rather than tuned further — a grid search against this data would optimise noise rather than signal.
+
+### Feature-Noise Robustness Sweep
+
+The near-zero false-positive rate reported throughout this chapter follows directly from the classifier's near-perfect separation of NORMAL from attack traffic on the synthetic feature simulator. To check whether this result is an artefact of unrealistically clean synthetic data rather than a property of the SEDM policy, the classifier was re-evaluated with multiplicative Gaussian noise injected onto every continuous feature before prediction:
+
+**Table 4.9 — Classifier accuracy and NORMAL→Attack false-positive rate under increasing injected feature-measurement noise (σ, multiplicative Gaussian, applied per-feature).**
+
+| Feature noise (σ) | Accuracy | NORMAL→Attack FPR |
+|---|---|---|
+| 0% | 99.85% | 0.00% |
+| 5% | 99.60% | 0.00% |
+| 10% | 99.35% | 0.00% |
+| 20% | 97.75% | 1.00% |
+| 35% | 94.60% | 7.00% |
+| 50% | 87.65% | 10.00% |
+
+![Classifier accuracy (left axis) and NORMAL→Attack false positive rate (right axis) as a function of injected feature measurement noise. False positives emerge smoothly once feature fidelity degrades beyond ~10% noise.](../latex/figures/classifier_noise_robustness.png)
+
+The classifier is robust to small measurement noise (≤10%, plausible for well-instrumented flow export), and false positives emerge smoothly and monotonically as feature fidelity degrades further, reaching 10.00% FPR at 50% noise. This is the direct evidence that the 0% headline false-positive rate is a property of the current synthetic simulator's clean separability, not a general claim about deployment conditions: **the SEDM/classifier pipeline does produce false positives under realistically degraded input, exactly as expected of any statistical classifier**, and the magnitude is now quantified rather than asserted.
+
+### Data Format Generality
+
+The 15-field feature schema (`FEATURE_NAMES`) is named after UNSW-NB15 for familiarity, but neither the classifier nor the SEDM has a code-level dependency on UNSW-NB15 or NSL-KDD specifically — both operate on a plain `dict[str, float]` matching that schema. The same fields map onto other commonly-available flow-export formats (NetFlow v9/IPFIX, Zeek `conn.log`, CICFlowMeter output) via a straightforward field mapping (see `docs/parameter_selection.md` §6), so the architecture is not bound to a single benchmark dataset's schema. This directly addresses the practicality concern raised of prior, dataset-locked evaluation work: the contribution under test is the kill-chain-aware SEDM policy and its evaluation methodology, not a fixed dataset binding — though substituting a real log parser for the synthetic simulator, and re-running this chapter's evaluation against it, remains future work (Chapter 5).

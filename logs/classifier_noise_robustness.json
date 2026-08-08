@@ -1,0 +1,32 @@
+[
+  {
+    "noise_pct": 0.0,
+    "accuracy_pct": 99.85000000000001,
+    "normal_fpr_pct": 0.0
+  },
+  {
+    "noise_pct": 5.0,
+    "accuracy_pct": 99.6,
+    "normal_fpr_pct": 0.0
+  },
+  {
+    "noise_pct": 10.0,
+    "accuracy_pct": 99.35000000000001,
+    "normal_fpr_pct": 0.0
+  },
+  {
+    "noise_pct": 20.0,
+    "accuracy_pct": 97.75,
+    "normal_fpr_pct": 1.0
+  },
+  {
+    "noise_pct": 35.0,
+    "accuracy_pct": 94.6,
+    "normal_fpr_pct": 7.000000000000001
+  },
+  {
+    "noise_pct": 50.0,
+    "accuracy_pct": 87.64999999999999,
+    "normal_fpr_pct": 10.0
+  }
+]

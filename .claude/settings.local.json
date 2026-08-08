@@ -32,7 +32,8 @@
       "Bash(python *)",
       "Bash(jobs)",
       "Bash(mkdir *)",
-      "Bash(venv/bin/python *)"
+      "Bash(venv/bin/python *)",
+      "Bash(kill %1)"
     ]
   }
 }

@@ -257,9 +257,13 @@ informational value of each signal.
 
 \paragraph{Empirical evaluation across four intent profiles.}
 Across 30 evaluation episodes per attacker intent (120 total, 24\,000 steps),
-the SEDM achieves detection rates of 99.09\% (Stealthy), 99.47\% (Aggressive),
-99.48\% (Targeted), and 99.41\% (Opportunistic), with false positive rates
-ranging from 3.33\% to 35.56\%.
+the SEDM achieves detection rates of 99.93\% (Stealthy), 100.0\% (Aggressive),
+99.97\% (Targeted), and 99.97\% (Opportunistic), with a measured false
+positive rate of 0.00\% for all four intents under classifier-driven
+decisions --- a consequence of the classifier's near-perfect separation of
+the synthetic attack-type distributions rather than a general immunity to
+false positives, as a feature-noise robustness sweep in
+Chapter~\ref{ch:results} subsequently confirms.
 These results are obtained with zero training overhead and full interpretability,
 demonstrating that the structure of the kill chain model permits a high-quality
 policy to be designed analytically.
@@ -275,8 +279,12 @@ The scope of this thesis is intentionally bounded to enable rigorous evaluation:
         UNSW-NB15 rather than fits to the actual dataset records.
   \item The attacker's Markov chain evolves independently of the defender's
         actions; the defender cannot deter or redirect the attacker.
-  \item Evaluation uses ground-truth attack labels; the Random Forest
-        classifier output is logged but not fed back into the SEDM.
+  \item The primary evaluation reports both an oracle mode (the SEDM decides
+        from ground-truth attack labels, an upper bound) and a
+        classifier-driven mode (the SEDM decides from the Random Forest
+        classifier's predicted attack type, scored against ground truth);
+        the classifier itself is trained and evaluated only on synthetic
+        feature distributions.
   \item Network topology is abstracted; all interactions are single-session
         point contacts without spatial or topological structure.
 \end{itemize}

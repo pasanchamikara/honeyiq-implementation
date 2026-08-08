@@ -1,0 +1,131 @@
+{
+  "config": {
+    "n_episodes": 50,
+    "n_steps": 500,
+    "benign_ratio": 0.3,
+    "seed": 42,
+    "classifier_driven": false
+  },
+  "intent_aggregates": {
+    "STEALTHY": {
+      "mean_reward": 438.85900000000004,
+      "std_reward": 106.51005196224439,
+      "mean_precision": 1.0,
+      "mean_recall": 1.0,
+      "mean_f1": 1.0,
+      "std_f1": 0.0,
+      "cv_f1": 0.0,
+      "mean_f2": 1.0,
+      "mean_specificity": 1.0,
+      "mean_fpr": 0.0,
+      "mean_prop_score": 0.6928,
+      "mean_late_miss": 0.0,
+      "mean_steps_to_contain": 2.22,
+      "mean_threat": 0.6781650235921144,
+      "mean_risk": 0.6356597642924801
+    },
+    "AGGRESSIVE": {
+      "mean_reward": 456.207,
+      "std_reward": 115.78311146708747,
+      "mean_precision": 1.0,
+      "mean_recall": 1.0,
+      "mean_f1": 1.0,
+      "std_f1": 0.0,
+      "cv_f1": 0.0,
+      "mean_f2": 1.0,
+      "mean_specificity": 1.0,
+      "mean_fpr": 0.0,
+      "mean_prop_score": 0.6984,
+      "mean_late_miss": 0.0,
+      "mean_steps_to_contain": 0.24,
+      "mean_threat": 0.7076994701871275,
+      "mean_risk": 0.6650159316756844
+    },
+    "TARGETED": {
+      "mean_reward": 484.01099999999997,
+      "std_reward": 113.49576480644552,
+      "mean_precision": 1.0,
+      "mean_recall": 1.0,
+      "mean_f1": 1.0,
+      "std_f1": 0.0,
+      "cv_f1": 0.0,
+      "mean_f2": 1.0,
+      "mean_specificity": 1.0,
+      "mean_fpr": 0.0,
+      "mean_prop_score": 0.6987599999999999,
+      "mean_late_miss": 0.0,
+      "mean_steps_to_contain": 0.6,
+      "mean_threat": 0.707703314819187,
+      "mean_risk": 0.6650194951845825
+    },
+    "OPPORTUNISTIC": {
+      "mean_reward": 359.953,
+      "std_reward": 107.01462863085588,
+      "mean_precision": 1.0,
+      "mean_recall": 1.0,
+      "mean_f1": 1.0,
+      "std_f1": 0.0,
+      "cv_f1": 0.0,
+      "mean_f2": 1.0,
+      "mean_specificity": 1.0,
+      "mean_fpr": 0.0,
+      "mean_prop_score": 0.6978799999999998,
+      "mean_late_miss": 0.0,
+      "mean_steps_to_contain": 1.08,
+      "mean_threat": 0.6646259496812522,
+      "mean_risk": 0.621947310974276
+    }
+  },
+  "spearman_rho": 0.4924904306563607,
+  "stage_action_table": [
+    [
+      0,
+      22,
+      33,
+      0,
+      0
+    ],
+    [
+      0,
+      38,
+      89,
+      79,
+      0
+    ],
+    [
+      0,
+      0,
+      606,
+      270,
+      0
+    ],
+    [
+      0,
+      0,
+      0,
+      2252,
+      831
+    ],
+    [
+      0,
+      0,
+      0,
+      1969,
+      5058
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      19772
+    ],
+    [
+      0,
+      0,
+      0,
+      0,
+      38422
+    ]
+  ]
+}

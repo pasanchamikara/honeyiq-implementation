@@ -682,12 +682,18 @@ different random seed (999) to ensure independence from training data.
 
 \subsection{Role in the System}
 
-In the current implementation, the classifier output is logged alongside
-the ground-truth attack type at each step for comparison and monitoring.
-The SEDM reads the attack type directly from the environment state vector
-(which contains the ground-truth label).
-Integrating classifier outputs into the decision pipeline is identified as
-a key direction for future work (Section~\ref{sec:future}).
+Two decision modes are evaluated (Chapter~\ref{ch:results}).
+In \emph{oracle} mode, the SEDM reads the attack type directly from the
+environment state vector (the ground-truth label) — this is an upper bound
+on achievable performance, used to establish that the SEDM's decision logic
+itself is correct given perfect information. In \emph{classifier-driven}
+mode — the realistic operating condition, since ground truth is never
+directly observable in deployment — the classifier's predicted attack type
+is substituted into the state vector before the SEDM's matrix lookup, so
+classification noise propagates into the policy's decisions. Both modes are
+reported side by side in the extended evaluation
+(Section~\ref{sec:results_extended}); classifier-driven decisions are used
+for the primary evaluation reported in Chapter~\ref{ch:results}.
 
 %% ── 3.8 Evaluation Infrastructure ───────────────────────────
 \section{Evaluation Infrastructure}

@@ -117,21 +117,25 @@ The result is a policy that adapts to four qualitatively different attack
 profiles without any training or parameter tuning.
 
 \paragraph{Finding 2: Detection rates above 99\% are achievable with a deterministic matrix.}
-The SEDM achieves detection rates of 99.09--99.48\% across all four attacker
-intents.
+The SEDM achieves detection rates of 99.93--100.0\% across all four attacker
+intents under classifier-driven decisions.
 This performance is competitive with the DQN baseline and substantially
 exceeds what a random policy would achieve.
 The result challenges the common assumption that high detection rate requires
 a learned, adaptive policy.
 
-\paragraph{Finding 3: False positive rates reflect intent-specific traffic distributions.}
-False positive rates vary from 3.33\% (Targeted) to 35.56\% (Stealthy),
-reflecting the intrinsic difficulty of discriminating attack from borderline
-benign traffic at early kill chain stages under stealthy intent profiles.
-This variation is a property of the evaluation scenarios rather than a failure
-of the SEDM: the same policy that produces few false alarms against
-high-severity campaigns naturally produces more against stealthy campaigns
-where the traffic boundary is less sharp.
+\paragraph{Finding 3: The near-zero false positive rate is a measured property of the current synthetic setup, not a general immunity claim.}
+The measured false positive rate is 0.00\% across all four intents under
+classifier-driven decisions, following from the R1 override's unconditional
+NORMAL$\to$ALLOW mapping combined with the classifier's near-perfect
+(99.85\%) separation of the synthetic attack-type distributions.
+This is a property of the evaluation scenario's clean feature separability
+rather than evidence that the SEDM eliminates false positives under any
+conditions: a feature-noise robustness sweep shows the false-positive rate
+rises predictably and monotonically as the classifier's input signal is made
+more realistic (up to 10.00\% at 50\% injected feature noise), and this
+degradation is essentially uniform across intents rather than
+intent-specific.
 
 \paragraph{Finding 4: Interpretability and detection performance are compatible.}
 The SEDM achieves detection rates comparable to the DQN with full
@@ -168,12 +172,15 @@ honeypot management system design:
         is a robust design principle that should be reflected in any honeypot
         policy, whether interpretable or learned.
 
-  \item \textbf{Calibrate expectations on false positives by attacker profile.}
-        A single false positive rate threshold is not appropriate for all
-        deployment contexts.
-        Networks facing stealthy APT campaigns should tolerate higher false
-        positive rates at early kill chain stages; networks facing opportunistic
-        automated attackers can operate with much lower thresholds.
+  \item \textbf{Calibrate expectations on false positives by input signal
+        quality, not attacker profile.}
+        Under the current evaluation, false positive rate does not vary
+        meaningfully by attacker intent (0.00\% for all four); it is driven
+        instead by classifier input fidelity.
+        Deployments should budget for false positives proportional to the
+        expected noise in their feature-extraction pipeline (e.g., flow
+        export quality, sampling rate) rather than assuming a single intent
+        profile is inherently noisier than another.
 
   \item \textbf{Use RL for refinement, not as a starting point.}
         A DQN trained alongside a deployed SEDM --- using live honeypot
@@ -198,11 +205,12 @@ reach critical kill-chain stages.
 
 The simulation infrastructure provides a principled, self-contained
 foundation for future research.
-Replacing synthetic feature distributions with real data fits, integrating
-the classifier output into the decision pipeline, modelling an adaptive
-attacker who responds to the defender's actions, and extending to a multi-node
-network topology are natural next steps that would progressively close the gap
-between simulation and operational deployment.
+Replacing synthetic feature distributions with real data fits, re-evaluating
+the already-integrated classifier-driven decision pipeline under realistic
+feature-measurement noise, modelling an adaptive attacker who responds to
+the defender's actions, and extending to a multi-node network topology are
+natural next steps that would progressively close the gap between
+simulation and operational deployment.
 
 As networked systems face increasingly sophisticated adversaries, the
 combination of structured attacker models, analytically-grounded decision

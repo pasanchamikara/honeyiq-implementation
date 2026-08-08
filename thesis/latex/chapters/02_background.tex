@@ -658,7 +658,12 @@ technology, making the framework applicable to a range of deployment contexts.
 
 \citet{miehling2018optimal} studied optimal defence under partial observability
 using a POMDP framework with Bayesian attack graphs.
-HoneyIQ currently treats the attacker's state (attack type, kill chain stage,
-intent) as fully observable via the ground-truth state vector.
-Replacing ground-truth labels with classifier outputs would introduce partial
-observability and is identified as a priority direction for future work.
+The oracle evaluation mode in this thesis treats the attacker's state
+(attack type, kill chain stage, intent) as fully observable via the
+ground-truth state vector, establishing an upper bound on achievable SEDM
+performance. The classifier-driven evaluation mode (Chapter~\ref{ch:results})
+replaces the ground-truth attack-type label with the RandomForest
+classifier's prediction, introducing exactly this kind of partial
+observability; a remaining direction for future work is extending
+observability limits to the kill-chain-stage and intent labels as well,
+which are still read from ground truth in both evaluation modes.

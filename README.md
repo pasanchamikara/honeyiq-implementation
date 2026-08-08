@@ -17,25 +17,80 @@ The SEDM maps the current kill chain stage and a Markov-chain-derived escalation
 
 ## Key Results
 
-Evaluated over 30 episodes per intent (200 steps each):
+Evaluated over 30 episodes per intent (200 steps each), classifier-driven SEDM
+(policy decisions are made from the RandomForest's *predicted* attack type,
+not ground truth — see [Methodology note](#evaluation-methodology-note) below):
 
 | Intent | Mean Reward | Detection Rate | False Positive Rate | Avg Threat Level |
 |---|---|---|---|---|
-| STEALTHY | 1012.22 ± 51.37 | **99.09%** | 35.56% | 0.806 |
-| AGGRESSIVE | 1090.84 ± 19.80 | **99.47%** | 6.67% | 0.854 |
-| TARGETED | 1127.10 ± 20.98 | **99.48%** | 3.33% | 0.853 |
-| OPPORTUNISTIC | 896.05 ± 32.98 | **99.41%** | 15.00% | 0.790 |
+| STEALTHY | 1010.22 ± 51.52 | **99.93%** | 0.00% | 0.806 |
+| AGGRESSIVE | 1090.84 ± 19.80 | **100.0%** | 0.00% | 0.854 |
+| TARGETED | 1126.10 ± 21.54 | **99.97%** | 0.00% | 0.853 |
+| OPPORTUNISTIC | 895.05 ± 33.30 | **99.97%** | 0.00% | 0.790 |
 
-The SEDM achieves near-perfect detection rates across all four attacker intent profiles, demonstrating strong cross-intent generalisation.
+The SEDM achieves near-perfect detection with zero measured false positives
+across all four attacker intent profiles. This is **not** a claim of
+real-world perfection — it is a direct consequence of two facts, both
+made explicit rather than left implicit:
+(1) the R1 override unconditionally maps a predicted-NORMAL sample to
+ALLOW, and (2) the RandomForest classifier separates NORMAL from
+attack traffic with 100% precision/recall on the synthetic UNSW-NB15-style
+feature distributions (99.85% overall 10-class accuracy — see
+[`logs/classifier_eval_report.json`](logs/classifier_eval_report.json)).
+Because the feature simulator generates attack classes from disjoint
+parametric distributions by construction, this ceiling is expected to be
+*optimistic* relative to real, noisy network telemetry. A feature-noise
+robustness sweep confirms the mechanism directly: injecting multiplicative
+Gaussian noise onto the simulated features degrades classifier accuracy from
+99.85% (0% noise) to 87.65% (50% noise) and raises the NORMAL→attack false
+positive rate from 0.00% to 10.00% (see
+[`logs/classifier_noise_robustness.json`](logs/classifier_noise_robustness.json),
+Figure `classifier_noise_robustness.png`) — i.e. false positives are
+recovered as soon as the input signal is made realistically imperfect,
+confirming the zero-FP result is a property of the (clean) synthetic data,
+not an artefact that would necessarily hold against real traffic captures.
 
 ### Action Distribution
 
 | Intent | ALLOW | LOG | TROLL | BLOCK | ALERT |
 |---|---|---|---|---|---|
-| STEALTHY | 0.0% | 1.1% | 0.7% | 17.9% | 80.3% |
-| AGGRESSIVE | 0.0% | 0.0% | 0.0% | 4.6% | 95.4% |
-| TARGETED | 0.0% | 0.5% | 0.1% | 5.4% | 94.0% |
-| OPPORTUNISTIC | 0.1% | 1.0% | 0.4% | 24.6% | 73.8% |
+| STEALTHY | 2.0% | 0.3% | 0.9% | 1.7% | 95.1% |
+| AGGRESSIVE | 0.7% | 0.0% | 0.1% | 1.7% | 97.6% |
+| TARGETED | 0.6% | 0.0% | 0.1% | 1.5% | 97.8% |
+| OPPORTUNISTIC | 0.8% | 0.0% | 0.2% | 2.8% | 96.2% |
+
+### Extended Metrics (Mixed Traffic, 50 episodes × 500 steps, 30% benign ratio)
+
+Precision/Recall/F1/Specificity/late-stage-miss/steps-to-contain, computed
+with the action correctly paired to the *same* observation's ground-truth
+label (see the methodology note below), for both an **oracle** SEDM
+(decides from ground-truth state) and a **classifier-driven** SEDM (decides
+from the RandomForest's prediction):
+
+| Intent | Variant | Precision | Recall | F1 | Specificity | Prop. Score | Late-Miss | Steps-to-Contain |
+|---|---|---|---|---|---|---|---|---|
+| STEALTHY | Oracle | 1.000 | 1.000 | 1.000 | 1.000 | 0.693 | 0.000 | 2.22 |
+| STEALTHY | Classifier | 1.000 | 1.000 | 1.000 | 0.999 | 0.693 | 0.000 | 2.3 |
+| AGGRESSIVE | Oracle | 1.000 | 1.000 | 1.000 | 1.000 | 0.698 | 0.000 | 0.24 |
+| AGGRESSIVE | Classifier | 1.000 | 1.000 | 1.000 | 0.999 | 0.698 | 0.000 | 0.2 |
+| TARGETED | Oracle | 1.000 | 1.000 | 1.000 | 1.000 | 0.699 | 0.000 | 0.60 |
+| TARGETED | Classifier | 1.000 | 0.999 | 0.999 | 0.999 | 0.699 | 0.001 | 0.6 |
+| OPPORTUNISTIC | Oracle | 1.000 | 1.000 | 1.000 | 1.000 | 0.698 | 0.000 | 1.08 |
+| OPPORTUNISTIC | Classifier | 0.999 | 1.000 | 1.000 | 0.999 | 0.698 | 0.000 | 1.1 |
+
+Spearman ρ (kill-chain stage vs. action severity, attack-only steps) = **0.492** (p < 1e-200).
+
+### Evaluation Methodology Note
+
+Both `evaluate.py` and `evaluation/sedm_eval.py` score each action against
+the ground-truth label of the **same observation** the action was chosen
+from — not the label of the *next* environment step. Pairing an action with
+the wrong step's label silently shifts every detection/FP metric by one time
+step; this was caught and fixed as **Bug 8** in
+[`docs/BUGS_AND_FIXES.md`](docs/BUGS_AND_FIXES.md), and the same fix was
+subsequently applied to `main.py`'s `demo`/`compare` paths and to
+`evaluation/sedm_eval.py`, which had regressed on this point when the
+extended-metrics evaluation was added.
 
 ---
 
@@ -73,15 +128,21 @@ honeyiq-implementation/
 │   └── 04_training_and_evaluation.ipynb
 │
 ├── assets/                    # Architecture diagrams
-├── docs/                      # Extended documentation
+├── docs/                      # Extended documentation (architecture, API, bug log, parameter selection)
 ├── models/                    # Saved checkpoints (dqn_agent.pt, classifier.joblib)
 ├── logs/                      # Training CSV metrics and PNG plots
-└── results/                   # Evaluation outputs (per-intent CSVs and plots)
-    └── evaluation/
-        ├── evaluation_summary.csv
-        ├── action_distribution.csv
-        ├── sedm_table.csv
-        └── *.png               # Visualisation plots
+├── results/                   # Evaluation outputs (per-intent CSVs and plots)
+│   └── evaluation/
+│       ├── evaluation_summary.csv
+│       ├── action_distribution.csv
+│       ├── sedm_table.csv
+│       └── *.png               # Visualisation plots
+│
+└── thesis/                    # Thesis-writing artifacts — isolated from the implementation above
+    ├── latex/                 # LaTeX thesis chapters, figures, bibliography
+    ├── doc0/                  # Chapter-by-chapter Markdown mirror of latex/chapters/, kept in sync
+    ├── slides/                # Defence slides
+    └── Thesis___HoneyIQ/
 ```
 
 ---

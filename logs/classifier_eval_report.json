@@ -1,0 +1,78 @@
+{
+  "accuracy": 0.9985,
+  "report": {
+    "NORMAL": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 200.0
+    },
+    "RECONNAISSANCE": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 200.0
+    },
+    "ANALYSIS": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 200.0
+    },
+    "FUZZERS": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 200.0
+    },
+    "EXPLOITS": {
+      "precision": 0.9900497512437811,
+      "recall": 0.995,
+      "f1-score": 0.9925187032418953,
+      "support": 200.0
+    },
+    "BACKDOORS": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 200.0
+    },
+    "SHELLCODE": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 200.0
+    },
+    "GENERIC": {
+      "precision": 0.9949748743718593,
+      "recall": 0.99,
+      "f1-score": 0.9924812030075187,
+      "support": 200.0
+    },
+    "DOS": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 200.0
+    },
+    "WORMS": {
+      "precision": 1.0,
+      "recall": 1.0,
+      "f1-score": 1.0,
+      "support": 200.0
+    },
+    "accuracy": 0.9985,
+    "macro avg": {
+      "precision": 0.998502462561564,
+      "recall": 0.9984999999999999,
+      "f1-score": 0.9984999906249413,
+      "support": 2000.0
+    },
+    "weighted avg": {
+      "precision": 0.998502462561564,
+      "recall": 0.9985,
+      "f1-score": 0.9984999906249413,
+      "support": 2000.0
+    }
+  }
+}

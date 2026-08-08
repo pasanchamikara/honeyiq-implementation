@@ -60,31 +60,35 @@ that the band classification is correct for the vast majority of steps.
 
 \subsection{False Positive Rate: Structural Causes}
 
-The false positive rate is the most nuanced performance dimension, varying
-by a factor of $\sim$10 across intents (3.33\% for TARGETED vs.\ 35.56\%
-for STEALTHY).
-This variation is not a failure of the SEDM but a reflection of the
-attacker model's properties.
+Under the corrected evaluation alignment (each action scored against the
+ground-truth label of the observation it was actually chosen from, rather
+than the following step's label), the measured false positive rate is
+0.00\% across all four intents under classifier-driven decisions. An
+earlier draft of this evaluation, produced before the one-step label-lag
+bug (documented as Bug 8/9 in \texttt{docs/BUGS\_AND\_FIXES.md}) was fixed,
+reported false positive rates varying by a factor of $\sim$10 across
+intents (3.33\% for TARGETED vs.\ 35.56\% for STEALTHY); that variation did
+not reflect real SEDM behaviour and has been withdrawn.
 
-Under STEALTHY, the attacker generates extended periods of
-RECONNAISSANCE-type traffic.
-The SEDM correctly assigns LOG or TROLL to this traffic because the kill
-chain stage is already Weaponization or Delivery (even though the individual
-traffic packets resemble RECONNAISSANCE).
-When the ground-truth label indicates these steps are attacks (which they
-are, since the attacker Markov chain is active), the SEDM's LOG/TROLL
-response counts as a true positive.
-But when the step involves NORMAL-type traffic (R1 trigger $\to$ ALLOW)
-and the session contains any true attack earlier, the false positive
-count can accumulate.
-
-The practical implication is that the 35.56\% STEALTHY false positive rate
-should be interpreted as: \emph{for 35.56\% of genuinely benign-traffic
-steps, the SEDM issued a non-ALLOW response because the session context
-(stage, escalation risk) warranted caution}.
-This is not necessarily operationally inappropriate --- a honeypot defender
-is justified in logging a connection from a host that has just completed
-a reconnaissance scan, even if the specific packet being examined is benign.
+The 0.00\% figure is not a claim that the SEDM is immune to false positives
+in general.
+It follows from two specific, checked properties of the current
+experimental setup: (1) the R1 override unconditionally maps a
+predicted-NORMAL sample to ALLOW, so any false positive must originate
+upstream in the classifier mistaking a true NORMAL sample for an attack
+type; and (2) the Random Forest classifier achieves 100\% precision and
+recall on the NORMAL class specifically (99.85\% accuracy overall), because
+the synthetic feature simulator draws each attack type from a disjoint
+parametric distribution by construction.
+Because real network telemetry does not offer this clean separability, a
+feature-noise robustness sweep (Chapter~\ref{ch:results},
+\S\ref{sec:results_params}) injects multiplicative Gaussian noise onto the
+classifier's input features and recovers a non-zero, monotonically
+increasing false-positive rate (0.00\% at $\le$10\% noise, rising to
+10.00\% at 50\% noise).
+This sweep, not the noiseless 0.00\% headline figure in isolation, is the
+evidence that should inform expectations about false-positive behaviour
+against real, noisy traffic.
 
 \subsection{Reward Ordering: TARGETED $>$ AGGRESSIVE $>$ STEALTHY $>$ OPPORTUNISTIC}
 
@@ -277,16 +281,24 @@ game-theoretic formulations, or a secondary attacker Markov chain that
 conditions on the observed defender actions --- would produce more realistic
 adversarial dynamics.
 
-\paragraph{Classifier not integrated into the decision pipeline.}
-The Random Forest classifier correctly identifies attack types from network
-features, but its output is not used by the SEDM, which reads ground-truth
-labels from the state vector.
-Replacing ground-truth labels with classifier predictions would test whether
-the SEDM is robust to classification noise --- an important prerequisite for
-real deployment.
-The classifier's misclassification rate (if non-trivial) could degrade the
-escalation risk computation, which currently assumes that the attack type
-is known.
+\paragraph{Classifier integration is validated only on synthetic data.}
+The primary and extended evaluations in Chapter~\ref{ch:results} now run
+the SEDM in a classifier-driven mode, deciding from the Random Forest
+classifier's \emph{predicted} attack type while scoring against ground
+truth, alongside an oracle mode that decides from ground-truth labels
+directly.
+This confirms that the SEDM remains robust (detection $\ge$\,99.9\%,
+classification metrics $\ge$\,0.999) under the classifier's residual
+misclassification rate.
+What remains untested is robustness under \emph{realistic} classification
+noise: the classifier's near-perfect accuracy (99.85\%) is itself a
+property of the synthetic feature simulator's clean class separability.
+The feature-noise robustness sweep (\S\ref{sec:results_params}) shows this
+ceiling degrades predictably as input fidelity decreases, but the SEDM's
+escalation-risk computation has not been re-evaluated end-to-end under
+noisy classifier input --- only the classifier's raw accuracy has been.
+Closing this gap, and eventually validating against a classifier trained on
+real (non-synthetic) network features, is the genuinely open item here.
 
 \paragraph{No network topology.}
 HoneyIQ models all interactions as single-session point contacts without
@@ -381,17 +393,23 @@ retrained on real network data.
 \section{Future Work Directions}
 \label{sec:future}
 
-\subsection{Classifier Integration}
+\subsection{Classifier Integration Under Realistic Noise}
 \label{sec:future_classifier}
 
-The most immediate extension is to replace the ground-truth attack label
-in the SEDM's decision pipeline with the Random Forest classifier's output.
-This would introduce observation noise proportional to the classifier's
-error rate and test whether the SEDM maintains $>$\,99\% detection under
-realistic classification uncertainty.
+The SEDM's decision pipeline already supports deciding from the Random
+Forest classifier's predicted attack type rather than ground truth
+(Chapter~\ref{ch:results}), and detection remains $>$\,99.9\% under this
+classifier-driven mode.
+The most immediate remaining extension is to re-run this evaluation with
+the classifier's input features corrupted by the same realistic
+measurement noise used in the feature-noise robustness sweep
+(\S\ref{sec:results_params}), to test whether the SEDM's escalation-risk
+computation and downstream action distribution degrade gracefully as
+classifier accuracy falls from 99.85\% toward the 87.65\% observed at 50\%
+feature noise.
 A confidence-weighted band assignment --- where uncertain classifier
 predictions widen the escalation risk estimate --- could provide a principled
-way to handle ambiguous observations.
+way to handle the resulting ambiguous observations.
 
 \subsection{Adaptive Attacker Modelling}
 

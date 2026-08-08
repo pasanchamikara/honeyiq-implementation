@@ -38,12 +38,15 @@ identification from raw network features as a supporting component.
 
 Experimental evaluation across 30~episodes per attacker intent (200 steps
 each) demonstrates that the SEDM achieves consistently high threat coverage:
-detection rates of \textbf{99.09\%}, \textbf{99.47\%}, \textbf{99.48\%},
-and \textbf{99.41\%} for the Stealthy, Aggressive, Targeted, and
-Opportunistic profiles respectively.
-False positive rates range from 3.33\% (Targeted) to 35.56\% (Stealthy),
-reflecting the inherent trade-off between sensitivity and specificity across
-intent profiles with different threat-level distributions.
+detection rates of \textbf{99.93\%}, \textbf{100.0\%}, \textbf{99.97\%},
+and \textbf{99.97\%} for the Stealthy, Aggressive, Targeted, and
+Opportunistic profiles respectively, with a measured false positive rate of
+\textbf{0.00\%} across all four intents under classifier-driven decisions.
+This near-zero false-positive rate is not a general immunity claim: it is a
+direct consequence of the classifier's near-perfect separation of the
+synthetic attack-type distributions, and a feature-noise robustness sweep
+shows false positives emerge predictably (up to 10.00\% at 50\% injected
+feature noise) once the input signal is made realistically noisy.
 The SEDM's transparency, zero training overhead, and consistent cross-intent
 performance are compared with the Deep Q-Network (DQN) baseline, whose
 training on Opportunistic traffic achieves comparable detection rates

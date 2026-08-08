@@ -83,12 +83,18 @@ def run_demo(
         features = info.get("features", {})
         action, pred_attack = defender.observe(state, features, training=False)
 
-        next_state, reward, terminated, truncated, info = env.step(action)
+        # Ground truth for THIS decision — decoded from `state`/`info`, the
+        # observation the action was actually chosen from — not from the
+        # `info` returned by env.step() below, which already describes the
+        # *next* step. Scoring against the wrong step's label silently shifts
+        # every detection/FP metric by one time step (see docs/BUGS_AND_FIXES.md, Bug 8).
+        attack_type  = info.get("attack_type", AttackType.NORMAL)
+        stage        = info.get("kill_chain_stage", KillChainStage.RECONNAISSANCE)
+        threat_level = info.get("threat_level", 0.0)
+        is_attack    = info.get("is_attack", False)
+        aligned_info = dict(info)
 
-        attack_type  = info["attack_type"]
-        stage        = info["kill_chain_stage"]
-        threat_level = info["threat_level"]
-        is_attack    = info["is_attack"]
+        next_state, reward, terminated, truncated, info = env.step(action)
 
         rec = StepRecord(
             episode=0, step=step, action=action, reward=reward,
@@ -98,10 +104,10 @@ def run_demo(
             is_attack=is_attack,
             predicted_attack=int(pred_attack),
             loss=None,
-            escalation_rate=info["escalation_rate"],
+            escalation_rate=aligned_info.get("escalation_rate", 0.0),
         )
         step_records.append(rec)
-        metrics.record_step(0, step, action, reward, info, pred_attack, None)
+        metrics.record_step(0, step, action, reward, aligned_info, pred_attack, None)
 
         total_reward += reward
 
@@ -196,8 +202,12 @@ def run_compare(
             for step in range(n_steps):
                 features = info.get("features", {})
                 action, pred_attack = defender.observe(state, features, training=False)
+                # Score against the ground truth of the observation the action
+                # was chosen from (`info`), not the *next* step's info returned
+                # by env.step() below — see docs/BUGS_AND_FIXES.md, Bug 8.
+                aligned_info = dict(info)
                 next_state, reward, terminated, truncated, info = env.step(action)
-                metrics.record_step(ep_idx, step, action, reward, info, pred_attack, None)
+                metrics.record_step(ep_idx, step, action, reward, aligned_info, pred_attack, None)
                 state = next_state
                 if terminated or truncated:
                     break

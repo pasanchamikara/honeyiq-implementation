@@ -544,6 +544,23 @@ def save_summary_table(results: Dict[str, IntentResult], out_dir: str) -> None:
     print(df.to_string(index=False))
 
 
+def save_action_distribution_table(results: Dict[str, IntentResult], out_dir: str) -> None:
+    """Save the per-intent action distribution (counts + %) as a CSV, alongside the plot."""
+    rows = []
+    for intent, res in results.items():
+        total = max(sum(res.action_counts.values()), 1)
+        row = {"Intent": intent}
+        for a in ACTION_NAMES:
+            count = res.action_counts.get(a, 0)
+            row[a] = count
+            row[f"{a}_%"] = round(100.0 * count / total, 1)
+        rows.append(row)
+    df   = pd.DataFrame(rows)
+    path = os.path.join(out_dir, "action_distribution.csv")
+    df.to_csv(path, index=False)
+    print(f"[Eval] Action distribution table → {path}")
+
+
 def save_sedm_table(out_dir: str) -> None:
     """Save the SEDM as a human-readable CSV for the thesis appendix."""
     rows = []
@@ -614,6 +631,7 @@ def evaluate(
 
     save_sedm_table(out_dir)
     save_summary_table(results, out_dir)
+    save_action_distribution_table(results, out_dir)
 
     plot_decision_matrix(out_dir)
     plot_escalation_risk_per_intent(out_dir)
