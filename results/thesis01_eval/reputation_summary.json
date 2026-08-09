@@ -1,0 +1,42 @@
+[
+  {
+    "offending_visits_so_far": 1,
+    "mean_reputation_at_next_open": 0.175,
+    "fraction_r4_overrides_r1": 0.0
+  },
+  {
+    "offending_visits_so_far": 2,
+    "mean_reputation_at_next_open": 0.35,
+    "fraction_r4_overrides_r1": 0.0
+  },
+  {
+    "offending_visits_so_far": 3,
+    "mean_reputation_at_next_open": 0.525,
+    "fraction_r4_overrides_r1": 0.0
+  },
+  {
+    "offending_visits_so_far": 4,
+    "mean_reputation_at_next_open": 0.7,
+    "fraction_r4_overrides_r1": 1.0
+  },
+  {
+    "offending_visits_so_far": 5,
+    "mean_reputation_at_next_open": 0.875,
+    "fraction_r4_overrides_r1": 1.0
+  },
+  {
+    "offending_visits_so_far": 6,
+    "mean_reputation_at_next_open": 1.0,
+    "fraction_r4_overrides_r1": 1.0
+  },
+  {
+    "offending_visits_so_far": 7,
+    "mean_reputation_at_next_open": 1.0,
+    "fraction_r4_overrides_r1": 1.0
+  },
+  {
+    "offending_visits_so_far": 8,
+    "mean_reputation_at_next_open": 1.0,
+    "fraction_r4_overrides_r1": 1.0
+  }
+]

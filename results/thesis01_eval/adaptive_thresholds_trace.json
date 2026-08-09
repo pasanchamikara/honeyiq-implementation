@@ -1,0 +1,624 @@
+[
+  {
+    "label": "continuous_attack",
+    "benign_ratio": 0.0,
+    "static_windows": [
+      {
+        "window_index": 0,
+        "r3_rate": 0.445,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 1,
+        "r3_rate": 0.52,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 2,
+        "r3_rate": 0.465,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 3,
+        "r3_rate": 0.405,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 4,
+        "r3_rate": 0.45,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 5,
+        "r3_rate": 0.38,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 6,
+        "r3_rate": 0.44,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 7,
+        "r3_rate": 0.49,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 8,
+        "r3_rate": 0.47,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 9,
+        "r3_rate": 0.52,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 10,
+        "r3_rate": 0.475,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 11,
+        "r3_rate": 0.53,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 12,
+        "r3_rate": 0.48,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 13,
+        "r3_rate": 0.435,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 14,
+        "r3_rate": 0.475,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 15,
+        "r3_rate": 0.43,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 16,
+        "r3_rate": 0.43,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 17,
+        "r3_rate": 0.445,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 18,
+        "r3_rate": 0.47,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 19,
+        "r3_rate": 0.46,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 20,
+        "r3_rate": 0.445,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 21,
+        "r3_rate": 0.495,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 22,
+        "r3_rate": 0.475,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 23,
+        "r3_rate": 0.39,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 24,
+        "r3_rate": 0.46,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 25,
+        "r3_rate": 0.55,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 26,
+        "r3_rate": 0.435,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 27,
+        "r3_rate": 0.37,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 28,
+        "r3_rate": 0.495,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 29,
+        "r3_rate": 0.435,
+        "threshold": 0.8
+      }
+    ],
+    "adaptive_windows": [
+      {
+        "window_index": 0,
+        "r3_rate": 0.445,
+        "threshold": 0.81
+      },
+      {
+        "window_index": 1,
+        "r3_rate": 0.52,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 2,
+        "r3_rate": 0.465,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 3,
+        "r3_rate": 0.405,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 4,
+        "r3_rate": 0.45,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 5,
+        "r3_rate": 0.38,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 6,
+        "r3_rate": 0.44,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 7,
+        "r3_rate": 0.49,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 8,
+        "r3_rate": 0.47,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 9,
+        "r3_rate": 0.52,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 10,
+        "r3_rate": 0.475,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 11,
+        "r3_rate": 0.53,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 12,
+        "r3_rate": 0.48,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 13,
+        "r3_rate": 0.435,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 14,
+        "r3_rate": 0.475,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 15,
+        "r3_rate": 0.43,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 16,
+        "r3_rate": 0.43,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 17,
+        "r3_rate": 0.445,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 18,
+        "r3_rate": 0.47,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 19,
+        "r3_rate": 0.46,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 20,
+        "r3_rate": 0.445,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 21,
+        "r3_rate": 0.495,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 22,
+        "r3_rate": 0.475,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 23,
+        "r3_rate": 0.39,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 24,
+        "r3_rate": 0.395,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 25,
+        "r3_rate": 0.485,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 26,
+        "r3_rate": 0.435,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 27,
+        "r3_rate": 0.37,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 28,
+        "r3_rate": 0.495,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 29,
+        "r3_rate": 0.435,
+        "threshold": 0.9
+      }
+    ],
+    "final_static_rate": 0.457,
+    "final_adaptive_rate": 0.44400000000000006,
+    "final_threshold": 0.9
+  },
+  {
+    "label": "mixed_traffic",
+    "benign_ratio": 0.3,
+    "static_windows": [
+      {
+        "window_index": 0,
+        "r3_rate": 0.03,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 1,
+        "r3_rate": 0.11,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 2,
+        "r3_rate": 0.09,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 3,
+        "r3_rate": 0.06,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 4,
+        "r3_rate": 0.05,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 5,
+        "r3_rate": 0.085,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 6,
+        "r3_rate": 0.15,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 7,
+        "r3_rate": 0.13,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 8,
+        "r3_rate": 0.06,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 9,
+        "r3_rate": 0.1,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 10,
+        "r3_rate": 0.025,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 11,
+        "r3_rate": 0.07,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 12,
+        "r3_rate": 0.08,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 13,
+        "r3_rate": 0.125,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 14,
+        "r3_rate": 0.045,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 15,
+        "r3_rate": 0.02,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 16,
+        "r3_rate": 0.045,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 17,
+        "r3_rate": 0.175,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 18,
+        "r3_rate": 0.105,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 19,
+        "r3_rate": 0.1,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 20,
+        "r3_rate": 0.1,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 21,
+        "r3_rate": 0.055,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 22,
+        "r3_rate": 0.02,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 23,
+        "r3_rate": 0.045,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 24,
+        "r3_rate": 0.045,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 25,
+        "r3_rate": 0.045,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 26,
+        "r3_rate": 0.085,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 27,
+        "r3_rate": 0.085,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 28,
+        "r3_rate": 0.08,
+        "threshold": 0.8
+      },
+      {
+        "window_index": 29,
+        "r3_rate": 0.085,
+        "threshold": 0.8
+      }
+    ],
+    "adaptive_windows": [
+      {
+        "window_index": 0,
+        "r3_rate": 0.03,
+        "threshold": 0.81
+      },
+      {
+        "window_index": 1,
+        "r3_rate": 0.04,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 2,
+        "r3_rate": 0.065,
+        "threshold": 0.8900000000000002
+      },
+      {
+        "window_index": 3,
+        "r3_rate": 0.005,
+        "threshold": 0.7000000000000001
+      },
+      {
+        "window_index": 4,
+        "r3_rate": 0.025,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 5,
+        "r3_rate": 0.04,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 6,
+        "r3_rate": 0.07,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 7,
+        "r3_rate": 0.07,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 8,
+        "r3_rate": 0.0,
+        "threshold": 0.7000000000000001
+      },
+      {
+        "window_index": 9,
+        "r3_rate": 0.065,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 10,
+        "r3_rate": 0.04,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 11,
+        "r3_rate": 0.025,
+        "threshold": 0.7000000000000001
+      },
+      {
+        "window_index": 12,
+        "r3_rate": 0.055,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 13,
+        "r3_rate": 0.06,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 14,
+        "r3_rate": 0.015,
+        "threshold": 0.7000000000000001
+      },
+      {
+        "window_index": 15,
+        "r3_rate": 0.035,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 16,
+        "r3_rate": 0.065,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 17,
+        "r3_rate": 0.04,
+        "threshold": 0.7899999999999999
+      },
+      {
+        "window_index": 18,
+        "r3_rate": 0.03,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 19,
+        "r3_rate": 0.08,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 20,
+        "r3_rate": 0.045,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 21,
+        "r3_rate": 0.07,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 22,
+        "r3_rate": 0.05,
+        "threshold": 0.7100000000000001
+      },
+      {
+        "window_index": 23,
+        "r3_rate": 0.03,
+        "threshold": 0.83
+      },
+      {
+        "window_index": 24,
+        "r3_rate": 0.03,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 25,
+        "r3_rate": 0.075,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 26,
+        "r3_rate": 0.03,
+        "threshold": 0.8700000000000002
+      },
+      {
+        "window_index": 27,
+        "r3_rate": 0.035,
+        "threshold": 0.7000000000000001
+      },
+      {
+        "window_index": 28,
+        "r3_rate": 0.03,
+        "threshold": 0.9
+      },
+      {
+        "window_index": 29,
+        "r3_rate": 0.05,
+        "threshold": 0.9
+      }
+    ],
+    "final_static_rate": 0.07600000000000001,
+    "final_adaptive_rate": 0.044000000000000004,
+    "final_threshold": 0.9
+  }
+]

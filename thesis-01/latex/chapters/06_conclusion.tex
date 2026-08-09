@@ -1,0 +1,362 @@
+%% ============================================================
+%%  Chapter 6 --- Conclusion
+%% ============================================================
+\chapter{Conclusion}
+\label{ch:conclusion}
+
+\section{Summary of the Work}
+
+This thesis presented HoneyIQ, a simulation framework for adaptive honeypot
+management in which a structured, intent-driven attacker --- modelled on the
+Lockheed Martin Cyber Kill Chain~\citep{hutchins2011intelligence} --- is
+opposed by two defender policies: the Stage-Escalation Decision Matrix (SEDM)
+and a Deep Q-Network (DQN) baseline. This version extends that framework in
+three directions --- more realistic synthetic traffic, a severity-weighted
+alternative escalation signal, and two auditable mechanisms for dynamic
+behavioural adjustment --- and uses the project's own DQN results as direct
+evidence when deciding how that third extension should be designed.
+
+The work was motivated by four observations, extending the three that
+motivated the original system.
+First, contemporary cyber adversaries conduct structured, multi-stage campaigns
+that progress predictably through reconnaissance, weaponization, delivery,
+exploitation, installation, command-and-control, and actions on objectives.
+Second, honeypots provide a uniquely valuable defensive layer that can detect,
+observe, and deceive attackers without disrupting production systems, but their
+effectiveness depends on the quality of the response policy.
+Third, learned policies based on deep reinforcement learning --- while capable
+of high performance --- are fundamentally opaque and therefore difficult to
+deploy in operational security environments that require auditability and
+explainability.
+Fourth, a policy fixed entirely at design time cannot account for information
+that only becomes available at runtime --- a source's attack history, or
+whether a given rule is firing so often it has stopped being informative ---
+and addressing this by reaching directly for a learned mechanism risks
+reintroducing the opacity problem the third observation already identifies.
+
+To address these challenges, this thesis made the following contributions.
+
+\subsection{HoneyIQ Simulation Framework}
+
+A fully self-contained, Gymnasium-compatible simulation environment implementing:
+%
+\begin{itemize}
+  \item A 24-dimensional state space combining one-hot attack type, kill chain
+        stage, and attacker intent with continuous threat level, attack count,
+        and escalation rate.
+  \item A five-action honeypot policy interface (ALLOW, LOG, TROLL, BLOCK,
+        ALERT) mapping response severity from passive passthrough to immediate
+        escalation.
+  \item A domain-informed reward function with three layers: a $5 \times 5$
+        base matrix, a late-stage amplifier for kill chain stages 4--6, and
+        attack-type-specific bonuses encoding honeypot best practices.
+  \item A comprehensive metrics layer computing per-step and per-episode
+        statistics including detection rate, false-positive rate, and
+        composite risk, with visualisations spanning both the original
+        evaluation and the new extensions.
+\end{itemize}
+
+All experiments are fully reproducible without access to live network data.
+
+\subsection{Intent-Aware Markov Attacker with Session-Coherent Traffic Realism}
+
+A coupled pair of Discrete-Time Markov Chains governing attack-type and
+kill-chain-stage transitions, with four intent profiles encoded as element-wise
+transition modifiers:
+%
+\begin{itemize}
+  \item \textbf{Stealthy}: slow, low-severity campaigns biased toward
+        reconnaissance and backdoor activity.
+  \item \textbf{Aggressive}: fast, high-severity campaigns biased toward
+        DoS, Worms, and Exploits.
+  \item \textbf{Targeted}: focused exploitation chains progressing from
+        Exploits through Shellcode to Backdoors.
+  \item \textbf{Opportunistic}: scattered campaigns with moderate escalation
+        speed and diverse attack types.
+\end{itemize}
+
+Network features are sampled from per-attack parametric distributions
+calibrated to UNSW-NB15 signatures, providing a bridge between the simulation
+and real-world traffic characteristics.
+The kill-chain floor constraint ensures temporal consistency by preventing
+unrealistic stage regression.
+New in this version, each simulated session draws a persistent intensity
+multiplier and, for benign traffic, one of three behavioural personas, so
+that a session's traffic is no longer an independent draw at every step but
+reads as one coherent source --- and benign traffic, previously a single
+distribution, now spans a small but qualitatively distinct population of
+sources.
+
+\subsection{Stage-Escalation Decision Matrix (SEDM) with a Fourth Override Rule}
+
+The principal technical contribution: an interpretable, deterministic, zero-
+training-overhead policy implementing a five-step decision algorithm:
+%
+\begin{enumerate}
+  \item Compute escalation risk analytically from the intent-specific Markov
+        transition matrix.
+  \item Classify the risk into Low, Medium, or High band.
+  \item Perform a $7 \times 3$ matrix lookup.
+  \item Apply four prioritised override rules (R4: cross-session reputation
+        $\to$ upgrade, checked first; R1: Normal $\to$ ALLOW; R2: DOS/WORMS
+        $\to$ upgrade; R3: high rate $\to$ upgrade).
+  \item Log a composite risk score for situational awareness.
+\end{enumerate}
+
+The SEDM's transparency is its defining property: every decision is traceable
+to a specific matrix entry and override condition, enabling full audit without
+post-hoc explanation approximations --- a property this version preserves
+exactly while adding genuine runtime adaptivity through R4.
+
+\subsection{Composite Threat-Level Metric and Severity-Weighted Escalation Tracking}
+
+A weighted combination (attack severity 45\%, kill chain stage 35\%,
+escalation rate 15\%, cumulative count 5\%) providing a normalised threat
+index that drives both the reward function and the SEDM's composite risk score.
+The weight assignment reflects domain reasoning about the relative informational
+value of each signal.
+New in this version, the escalation-rate component of this metric can be
+computed either by the original hard sliding window or by a severity-weighted
+exponential moving average, computed side by side so the two can be compared
+directly (\S\,4.10) rather than substituted blindly.
+
+\subsection{Auditable Dynamic Response}
+
+Two new mechanisms allow the SEDM's behaviour to respond to runtime
+observation while remaining fully traceable by construction: a
+\texttt{ReputationTracker} maintaining a half-life-decayed offense score per
+source address, independent of individual session lifetimes, feeding the new
+R4 override; and a bounded deadband controller (\texttt{AdaptiveThresholds})
+that keeps the R3 override's trigger frequency near an operator-specified
+target, explicitly scoped as an alert-fatigue safety valve rather than a
+correctness mechanism. Both default to reproducing the original system's
+exact prior behaviour when not explicitly engaged.
+
+\subsection{DQN Baseline, Comparison, and a Direct Answer on Dynamic-Response Design}
+
+A full DQN implementation ($24 \to 256 \to 128 \to 64 \to 5$ with
+LayerNorm, experience replay, target network, Huber loss, and epsilon-greedy
+exploration) trained for 300 episodes on the Opportunistic intent.
+The DQN achieves comparable detection rates ($>$98.5\%) to the SEDM but requires
+150\,000 training steps, produces an opaque policy, and exhibits undefined
+false-positive rate characteristics due to the dense-attack training distribution.
+This version uses that specific, already-collected evidence --- together with
+this project's own documented evaluation-harness defect history --- as the
+basis for a direct, project-grounded argument (\S\,5.3) that the auditable
+mechanisms above, not a learned mechanism, were the appropriate choice for
+dynamic response at this stage of the project.
+
+\section{Key Findings}
+
+\paragraph{Finding 1: Analytical escalation risk enables exact, training-free adaptation.}
+The Markov chain structure provides exact, per-intent escalation probabilities
+that the SEDM uses directly.
+This avoids the data dependency of RL-based approaches while correctly
+capturing the intent-specific differences in campaign tempo.
+The result is a policy that adapts to four qualitatively different attack
+profiles without any training or parameter tuning.
+
+\paragraph{Finding 2: Detection rates above 99\% are achievable with a deterministic matrix.}
+The SEDM achieves detection rates of 99.93--100.0\% across all four attacker
+intents under classifier-driven decisions.
+This performance is competitive with the DQN baseline and substantially
+exceeds what a random policy would achieve.
+The result challenges the common assumption that high detection rate requires
+a learned, adaptive policy.
+
+\paragraph{Finding 3: The near-zero false positive rate is a measured property of the current synthetic setup, not a general immunity claim --- and this claim is now supported by two independent lines of evidence rather than one.}
+The measured false positive rate is 0.00\% across all four intents under
+classifier-driven decisions, following from the R1 override's unconditional
+NORMAL$\to$ALLOW mapping combined with the classifier's near-perfect
+(99.85\%) separation of the synthetic attack-type distributions.
+A feature-noise robustness sweep shows the false-positive rate rises
+predictably and monotonically as the classifier's input signal is made more
+realistic via artificial noise injection (up to 10.00\% at 50\% injected
+feature noise).
+This version adds a second, independent probe that reaches the same
+conclusion without any artificial noise: making the traffic generator itself
+more realistic (session-coherent intensity, multi-persona benign traffic,
+\S\,3.2.4) drops classifier accuracy from 99.85\% to 99.40\% and NORMAL-class
+recall from 1.0000 to 0.9900 (\S\,4.9), through the same underlying mechanism
+(reduced class separability) as the noise sweep.
+Two structurally different interventions degrading the same headline number
+in the same direction, for the same underlying reason, is stronger evidence
+than either alone that the 0.00\% figure was never a general immunity claim.
+
+\paragraph{Finding 4: Interpretability and detection performance are compatible --- including for the dynamic-adjustment capability RL is usually reached for.}
+The SEDM achieves detection rates comparable to the DQN with full
+interpretability, zero training overhead, and superior cross-intent
+consistency.
+This finding supports the recommendation of \citet{rudin2019stop} to prefer
+interpretable models in high-stakes domains when the problem structure permits
+a good interpretable solution --- and the kill chain model clearly provides
+such a structure.
+This version extends the finding to a capability usually assumed to require
+learning: runtime behavioural adjustment.
+The reputation override and the bounded threshold controller (\S\,3.10)
+demonstrate that genuine, observation-driven dynamic response is achievable
+within the same fully-auditable design family as the original SEDM, without a
+training loop or an opaque function approximator.
+
+\paragraph{Finding 5: DQN specialises to the training distribution.}
+The DQN's effective strategy of ``almost never ALLOW'' achieves high
+detection on the Opportunistic training distribution but would not generalise
+to scenarios with more balanced benign/attack traffic.
+This specialisation is an artefact of the dense-attack training environment,
+not an inherent limitation of DQN, but it illustrates the importance of
+training distribution design for RL-based security policies --- and, in this
+version, serves as the direct evidence justifying the decision not to build
+dynamic response as a learned mechanism (\S\,5.3).
+
+\paragraph{Finding 6: A severity-weighted escalation signal produces a materially different, and arguably more design-intent-consistent, override-trigger regime than the original frequency-based signal.}
+Under the continuous-attack evaluation protocol used throughout this thesis,
+the original window-based escalation signal saturates near its maximum for
+most of a typical episode, causing the R3 override to fire on 44.7--90.0\% of
+decisions across the four intents --- closer to a background condition than
+the ``sustained, dense attack traffic'' trigger the threshold was designed to
+detect.
+The severity-weighted EMA alternative introduced in this version fires far
+more selectively (0.7--22.0\%) because its steady-state ceiling is bounded by
+attack severity rather than by 1.0 (\S\,4.10).
+Both behaviours are internally consistent with their respective signal
+definitions; the finding is that the choice of escalation signal has large,
+previously unmeasured, operational consequences.
+
+\paragraph{Finding 7: Cross-session reputation closes a specific, previously-identified evasion gap, deterministically and after a small, known number of offenses.}
+A repeat offender's superficially benign opening event, on returning after
+session expiry, is no longer treated as first contact once four
+EXPLOITS-severity prior offenses have accumulated (fewer for higher-severity
+attack types, more for lower-severity ones) --- a threshold-crossing
+behaviour confirmed identically across 30 independently simulated source
+addresses (\S\,4.11).
+This directly operationalises the ``camouflaging attacker'' concern that an
+earlier draft of this thesis's evaluation claimed empirical support for and
+later withdrew as a measurement artefact (\S\,4.7); R4 is a structural answer
+to the underlying concern, independent of that earlier withdrawn claim.
+
+\paragraph{Finding 8: A narrowly-scoped, honestly-framed adaptive mechanism can be evaluated honestly too --- including reporting where it does not help much.}
+The bounded \texttt{RATE\_THRESHOLD} controller reduces R3's trigger rate
+substantially under mixed-traffic conditions (7.60\% $\to$ 4.40\%) but only
+marginally under the fully-saturated continuous-attack conditions used in
+most of this thesis's primary evaluation (45.70\% $\to$ 44.40\%), because its
+bounded design cannot compensate for an escalation signal saturated for
+reasons unrelated to the controller (\S\,4.12).
+This is reported as a genuine finding about the mechanism's operating limits,
+not smoothed over --- a direct consequence of scoping the mechanism's claims
+narrowly and honestly in the first place (\S\,3.10.2, \S\,5.3).
+
+\section{Implications for Practice}
+
+The results of this thesis suggest several practical implications for
+honeypot management system design:
+
+\begin{enumerate}
+  \item \textbf{Start with an interpretable policy.}
+        The SEDM's performance, immediate operability, and auditability make
+        it the appropriate default for initial deployment.
+        A security team can review, understand, and modify the 7-row matrix
+        without requiring machine learning expertise --- and, as of this
+        version, can extend it with genuine runtime adaptivity (reputation
+        tracking, bounded threshold control) without giving up that property.
+
+  \item \textbf{Use the kill chain model explicitly.}
+        The strong correlation between kill chain stage and appropriate
+        response severity (ALLOW at Reconnaissance, ALERT at C2 and beyond)
+        is a robust design principle that should be reflected in any honeypot
+        policy, whether interpretable or learned.
+
+  \item \textbf{Calibrate expectations on false positives by input signal
+        quality, not attacker profile.}
+        Under the current evaluation, false positive rate does not vary
+        meaningfully by attacker intent (0.00\% for all four); it is driven
+        instead by classifier input fidelity, and --- as this version's
+        traffic-realism results confirm --- by how realistically that
+        fidelity is itself modelled.
+        Deployments should budget for false positives proportional to the
+        expected noise and diversity in their feature-extraction pipeline and
+        traffic population, not assume a single intent profile is inherently
+        noisier than another.
+
+  \item \textbf{Treat cross-session memory as a first-class design
+        requirement, not an afterthought.}
+        A policy evaluated only within single, independent sessions cannot
+        represent --- and therefore cannot be credited or debited for --- its
+        behaviour toward a source that returns.
+        This version's reputation mechanism shows that adding this capability
+        does not require abandoning interpretability, and that its behaviour
+        (a specific, auditable offense-count threshold) can be characterised
+        precisely rather than left as a qualitative claim.
+
+  \item \textbf{Adopt bounded, narrowly-scoped adaptive mechanisms before
+        learned ones, and evaluate them against their actual, stated
+        purpose.}
+        The threshold controller in this version demonstrates both halves of
+        this recommendation: it was scoped honestly (an alert-fatigue safety
+        valve, not a correctness mechanism) precisely because no signal
+        existed to justify a stronger claim, and it was evaluated against
+        that stated purpose rather than a more impressive-sounding one it was
+        never designed to meet --- surfacing a genuine regime-dependent
+        limitation (\S\,4.12) that a less honestly-scoped evaluation might
+        have obscured.
+
+  \item \textbf{Use RL for refinement only after a real feedback pathway
+        exists, not as the default path to ``adaptive.''}
+        A DQN trained alongside a deployed SEDM --- using live honeypot
+        interactions and, critically, real analyst-confirmed labels rather
+        than a proxy signal --- could discover refinements to the matrix or
+        its thresholds that are not immediately obvious to human designers.
+        This version's contribution is to make the \emph{gate} on that
+        refinement stage concrete: build the analyst-labelling pathway first
+        (\S\,5.6), rather than treating ``collect more training data'' as a
+        sufficient condition on its own.
+\end{enumerate}
+
+\section{Closing Remarks}
+
+HoneyIQ demonstrates that the mathematical structure of the Markov attacker
+model --- specifically, the analytically computable escalation probabilities
+derived from intent-specific transition matrices --- provides sufficient
+information to design a high-quality, interpretable honeypot policy without
+any machine learning.
+The Stage-Escalation Decision Matrix translates the probabilistic dynamics
+of the kill chain into a human-readable response protocol that aligns with
+honeypot best practices: engaging low-severity traffic passively, tarpitting
+persistent attackers for intelligence, and escalating decisively as campaigns
+reach critical kill-chain stages.
+
+This version extends that demonstration to a question the original system
+left open: whether \emph{dynamic} behaviour --- responding to a source's
+history, or to the system's own operating characteristics --- necessarily
+requires abandoning that interpretability.
+It does not.
+A half-life-decayed reputation score and a bounded deadband controller, each
+reducible at any instant to a handful of named numbers a human analyst can
+verify directly, provide genuine runtime adaptivity without a training loop,
+a reward function that can silently teach the wrong lesson, or a model that
+requires after-the-fact explanation to the people who built it.
+This project's own DQN baseline --- its documented convergence to a
+distributional shortcut rather than genuine discrimination, and the
+independently-recurring label-alignment defects in the evaluation code that
+would have fed a reward signal built the same way --- is not cited here as a
+generic objection to reinforcement learning, but as concrete,
+project-specific evidence that this particular shortcut was not yet available
+to take safely, and a precise statement (\S\,5.6) of what would need to be
+true before it was.
+
+The simulation infrastructure provides a principled, self-contained
+foundation for future research.
+Replacing synthetic feature distributions with real data fits, re-evaluating
+the already-integrated classifier-driven decision pipeline under realistic
+feature-measurement noise, modelling an adaptive attacker who responds to
+the defender's actions, extending to a multi-node network topology, and ---
+new in this version --- building the analyst-labelling pathway that would
+responsibly enable a future learning-based refinement stage, are natural next
+steps that would progressively close the gap between simulation and
+operational deployment.
+
+As networked systems face increasingly sophisticated adversaries, the
+combination of structured attacker models, analytically-grounded decision
+policies, auditable runtime adaptivity, and rigorous, honestly-scoped
+simulation-based evaluation offers a principled path toward honeypot
+management that is simultaneously effective, trustworthy, adaptive, and
+deployable in the operational environments that need it most.

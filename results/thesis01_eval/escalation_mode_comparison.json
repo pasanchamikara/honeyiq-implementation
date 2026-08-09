@@ -1,0 +1,162 @@
+[
+  {
+    "intent": "STEALTHY",
+    "mode": "window",
+    "detection_rate": 1.0,
+    "false_positive_rate": 0.0,
+    "r3_trigger_rate": 0.9001666666666667,
+    "override_counts": {
+      "none": 144,
+      "R1_NORMAL_ALLOW": 114,
+      "R2_HIGH_IMPACT": 341,
+      "R3_HIGH_RATE": 5401,
+      "R4_REPEAT_OFFENDER": 0
+    },
+    "mean_reward": 1012.2199999999999,
+    "std_reward": 51.37292672215591,
+    "escalation_mean": 0.9730779337957501,
+    "escalation_p95": 1.0,
+    "escalation_max": 1.0,
+    "n_steps": 6000
+  },
+  {
+    "intent": "STEALTHY",
+    "mode": "ema",
+    "detection_rate": 1.0,
+    "false_positive_rate": 0.0,
+    "r3_trigger_rate": 0.027833333333333335,
+    "override_counts": {
+      "none": 5378,
+      "R1_NORMAL_ALLOW": 114,
+      "R2_HIGH_IMPACT": 341,
+      "R3_HIGH_RATE": 167,
+      "R4_REPEAT_OFFENDER": 0
+    },
+    "mean_reward": 950.9833333333333,
+    "std_reward": 55.652815642057945,
+    "escalation_mean": 0.6755881069228054,
+    "escalation_p95": 0.7985188573598861,
+    "escalation_max": 0.8350073099136353,
+    "n_steps": 6000
+  },
+  {
+    "intent": "AGGRESSIVE",
+    "mode": "window",
+    "detection_rate": 1.0,
+    "false_positive_rate": 0.0,
+    "r3_trigger_rate": 0.4465,
+    "override_counts": {
+      "none": 20,
+      "R1_NORMAL_ALLOW": 40,
+      "R2_HIGH_IMPACT": 3261,
+      "R3_HIGH_RATE": 2679,
+      "R4_REPEAT_OFFENDER": 0
+    },
+    "mean_reward": 1090.8366666666666,
+    "std_reward": 19.798257218474784,
+    "escalation_mean": 0.9905419026439388,
+    "escalation_p95": 1.0,
+    "escalation_max": 1.0,
+    "n_steps": 6000
+  },
+  {
+    "intent": "AGGRESSIVE",
+    "mode": "ema",
+    "detection_rate": 1.0,
+    "false_positive_rate": 0.0,
+    "r3_trigger_rate": 0.08,
+    "override_counts": {
+      "none": 2219,
+      "R1_NORMAL_ALLOW": 40,
+      "R2_HIGH_IMPACT": 3261,
+      "R3_HIGH_RATE": 480,
+      "R4_REPEAT_OFFENDER": 0
+    },
+    "mean_reward": 1049.5733333333333,
+    "std_reward": 28.831764119148552,
+    "escalation_mean": 0.754795169372422,
+    "escalation_p95": 0.8493967562913894,
+    "escalation_max": 0.8754493594169617,
+    "n_steps": 6000
+  },
+  {
+    "intent": "TARGETED",
+    "mode": "window",
+    "detection_rate": 1.0,
+    "false_positive_rate": 0.0,
+    "r3_trigger_rate": 0.6771666666666667,
+    "override_counts": {
+      "none": 4,
+      "R1_NORMAL_ALLOW": 33,
+      "R2_HIGH_IMPACT": 1900,
+      "R3_HIGH_RATE": 4063,
+      "R4_REPEAT_OFFENDER": 0
+    },
+    "mean_reward": 1127.1,
+    "std_reward": 20.981896959045432,
+    "escalation_mean": 0.9936340867479643,
+    "escalation_p95": 1.0,
+    "escalation_max": 1.0,
+    "n_steps": 6000
+  },
+  {
+    "intent": "TARGETED",
+    "mode": "ema",
+    "detection_rate": 1.0,
+    "false_positive_rate": 0.0,
+    "r3_trigger_rate": 0.21966666666666668,
+    "override_counts": {
+      "none": 2749,
+      "R1_NORMAL_ALLOW": 33,
+      "R2_HIGH_IMPACT": 1900,
+      "R3_HIGH_RATE": 1318,
+      "R4_REPEAT_OFFENDER": 0
+    },
+    "mean_reward": 1085.7466666666664,
+    "std_reward": 24.486210178157208,
+    "escalation_mean": 0.7607123844794308,
+    "escalation_p95": 0.8410462260246276,
+    "escalation_max": 0.8786312937736511,
+    "n_steps": 6000
+  },
+  {
+    "intent": "OPPORTUNISTIC",
+    "mode": "window",
+    "detection_rate": 1.0,
+    "false_positive_rate": 0.0,
+    "r3_trigger_rate": 0.6855,
+    "override_counts": {
+      "none": 23,
+      "R1_NORMAL_ALLOW": 44,
+      "R2_HIGH_IMPACT": 1820,
+      "R3_HIGH_RATE": 4113,
+      "R4_REPEAT_OFFENDER": 0
+    },
+    "mean_reward": 896.0533333333333,
+    "std_reward": 32.980243917971386,
+    "escalation_mean": 0.9900085691834489,
+    "escalation_p95": 1.0,
+    "escalation_max": 1.0,
+    "n_steps": 6000
+  },
+  {
+    "intent": "OPPORTUNISTIC",
+    "mode": "ema",
+    "detection_rate": 1.0,
+    "false_positive_rate": 0.0,
+    "r3_trigger_rate": 0.007,
+    "override_counts": {
+      "none": 4094,
+      "R1_NORMAL_ALLOW": 44,
+      "R2_HIGH_IMPACT": 1820,
+      "R3_HIGH_RATE": 42,
+      "R4_REPEAT_OFFENDER": 0
+    },
+    "mean_reward": 836.72,
+    "std_reward": 37.87527249626949,
+    "escalation_mean": 0.6329776101158932,
+    "escalation_p95": 0.7973053306341171,
+    "escalation_max": 0.8596561551094055,
+    "n_steps": 6000
+  }
+]

@@ -1,0 +1,186 @@
+[
+  {
+    "intent": "STEALTHY",
+    "benign_ratio": 0.0,
+    "n_episodes": 30,
+    "n_steps": 200,
+    "tp": 5885,
+    "fp": 0,
+    "tn": 114,
+    "fn": 1,
+    "n_attack_samples": 5886,
+    "n_benign_samples": 114,
+    "detection_rate": 0.9998301053346925,
+    "detection_rate_ci95": [
+      0.9990382058003379,
+      0.9999700087902695
+    ],
+    "false_positive_rate": 0.0,
+    "false_positive_rate_ci95": [
+      0.0,
+      0.0325985341736427
+    ],
+    "protocol": "original_primary"
+  },
+  {
+    "intent": "AGGRESSIVE",
+    "benign_ratio": 0.0,
+    "n_episodes": 30,
+    "n_steps": 200,
+    "tp": 5959,
+    "fp": 0,
+    "tn": 40,
+    "fn": 1,
+    "n_attack_samples": 5960,
+    "n_benign_samples": 40,
+    "detection_rate": 0.9998322147651006,
+    "detection_rate_ci95": [
+      0.9990501396008531,
+      0.9999703811720699
+    ],
+    "false_positive_rate": 0.0,
+    "false_positive_rate_ci95": [
+      6.938893903907228e-18,
+      0.08762160123480767
+    ],
+    "protocol": "original_primary"
+  },
+  {
+    "intent": "TARGETED",
+    "benign_ratio": 0.0,
+    "n_episodes": 30,
+    "n_steps": 200,
+    "tp": 5962,
+    "fp": 0,
+    "tn": 33,
+    "fn": 5,
+    "n_attack_samples": 5967,
+    "n_benign_samples": 33,
+    "detection_rate": 0.9991620579855874,
+    "detection_rate_ci95": [
+      0.9980397946078314,
+      0.9996420298187669
+    ],
+    "false_positive_rate": 0.0,
+    "false_positive_rate_ci95": [
+      0.0,
+      0.10426999758628748
+    ],
+    "protocol": "original_primary"
+  },
+  {
+    "intent": "OPPORTUNISTIC",
+    "benign_ratio": 0.0,
+    "n_episodes": 30,
+    "n_steps": 200,
+    "tp": 5956,
+    "fp": 0,
+    "tn": 44,
+    "fn": 0,
+    "n_attack_samples": 5956,
+    "n_benign_samples": 44,
+    "detection_rate": 1.0,
+    "detection_rate_ci95": [
+      0.9993554427833292,
+      0.9999999999999999
+    ],
+    "false_positive_rate": 0.0,
+    "false_positive_rate_ci95": [
+      0.0,
+      0.08029560379314069
+    ],
+    "protocol": "original_primary"
+  },
+  {
+    "intent": "STEALTHY",
+    "benign_ratio": 0.3,
+    "n_episodes": 50,
+    "n_steps": 500,
+    "tp": 17243,
+    "fp": 53,
+    "tn": 7696,
+    "fn": 8,
+    "n_attack_samples": 17251,
+    "n_benign_samples": 7749,
+    "detection_rate": 0.9995362587676077,
+    "detection_rate_ci95": [
+      0.9990851005420783,
+      0.9997649926987174
+    ],
+    "false_positive_rate": 0.006839592205445864,
+    "false_positive_rate_ci95": [
+      0.005233142302291018,
+      0.008934754643092903
+    ],
+    "protocol": "revised_primary"
+  },
+  {
+    "intent": "AGGRESSIVE",
+    "benign_ratio": 0.3,
+    "n_episodes": 50,
+    "n_steps": 500,
+    "tp": 17434,
+    "fp": 45,
+    "tn": 7510,
+    "fn": 11,
+    "n_attack_samples": 17445,
+    "n_benign_samples": 7555,
+    "detection_rate": 0.9993694468329034,
+    "detection_rate_ci95": [
+      0.9988711539285243,
+      0.9996478618534986
+    ],
+    "false_positive_rate": 0.005956320317670417,
+    "false_positive_rate_ci95": [
+      0.00445466901454632,
+      0.007960124883924403
+    ],
+    "protocol": "revised_primary"
+  },
+  {
+    "intent": "TARGETED",
+    "benign_ratio": 0.3,
+    "n_episodes": 50,
+    "n_steps": 500,
+    "tp": 17435,
+    "fp": 60,
+    "tn": 7494,
+    "fn": 11,
+    "n_attack_samples": 17446,
+    "n_benign_samples": 7554,
+    "detection_rate": 0.9993694829760403,
+    "detection_rate_ci95": [
+      0.9988712186129733,
+      0.9996478820399766
+    ],
+    "false_positive_rate": 0.007942811755361398,
+    "false_positive_rate_ci95": [
+      0.006176079412772228,
+      0.010209744436169881
+    ],
+    "protocol": "revised_primary"
+  },
+  {
+    "intent": "OPPORTUNISTIC",
+    "benign_ratio": 0.3,
+    "n_episodes": 50,
+    "n_steps": 500,
+    "tp": 17424,
+    "fp": 49,
+    "tn": 7522,
+    "fn": 5,
+    "n_attack_samples": 17429,
+    "n_benign_samples": 7571,
+    "detection_rate": 0.9997131218084802,
+    "detection_rate_ci95": [
+      0.9993285557085984,
+      0.99987745675614
+    ],
+    "false_positive_rate": 0.006472064456478669,
+    "false_positive_rate_ci95": [
+      0.004899274035235088,
+      0.008545424362231867
+    ],
+    "protocol": "revised_primary"
+  }
+]

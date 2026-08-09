@@ -1,0 +1,286 @@
+%% ============================================================
+%%  Appendix B --- Full Hyperparameter and Configuration Listing
+%% ============================================================
+\chapter{Full Hyperparameter and Configuration Listing}
+\label{app:hyperparams}
+
+Table~\ref{tab:full_hyperparams} lists every configurable parameter in
+HoneyIQ with its default value, the file in which it is defined, and
+a brief rationale. Parameters introduced in this version are listed in
+\S\S\,B.4--B.7.
+
+\begin{longtable}{p{3.8cm}p{2.6cm}p{3.5cm}p{3.2cm}}
+  \caption{Complete HoneyIQ parameter listing with rationale (parameters unchanged from the original system).}
+  \label{tab:full_hyperparams} \\
+  \toprule
+  Parameter & Default & Source & Rationale \\
+  \midrule
+  \endfirsthead
+  \multicolumn{4}{c}{\tablename\ \thetable{} (continued)} \\
+  \toprule
+  Parameter & Default & Source & Rationale \\
+  \midrule
+  \endhead
+  \midrule
+  \multicolumn{4}{r}{\footnotesize Continued on next page} \\
+  \endfoot
+  \bottomrule
+  \endlastfoot
+
+  %% DQN Architecture
+  \multicolumn{4}{l}{\textbf{DQN Network (\texttt{defender/dqn.py})}} \\[3pt]
+  state\_dim         & 24          & \texttt{dqn.py}       & Observation vector length \\
+  action\_dim        & 5           & \texttt{dqn.py}       & HoneypotAction count \\
+  hidden\_layers     & [256,128,64]& \texttt{dqn.py}       & Wide-to-narrow funnel \\
+  normalisation      & LayerNorm   & \texttt{dqn.py}       & Batch-size-agnostic \\
+  activation         & ReLU        & \texttt{dqn.py}       & Standard deep RL choice \\
+  weight\_init       & Kaiming uniform & \texttt{dqn.py}   & Preserves gradient variance \\[6pt]
+
+  %% DQN Training
+  \multicolumn{4}{l}{\textbf{DQN Training (\texttt{train.py})}} \\[3pt]
+  learning\_rate     & $10^{-3}$   & \texttt{train.py}    & Adam optimiser \\
+  gamma              & 0.99        & \texttt{train.py}    & Emphasises future rewards \\
+  epsilon\_initial   & 1.0         & \texttt{train.py}    & Full exploration at start \\
+  epsilon\_min       & 0.05        & \texttt{train.py}    & Retains 5\% exploration \\
+  epsilon\_decay     & 0.997       & \texttt{train.py}    & Exponential annealing \\
+  buffer\_capacity   & 15\,000     & \texttt{train.py}    & 30 episodes of 500 steps \\
+  batch\_size        & 64          & \texttt{train.py}    & Standard mini-batch \\
+  target\_update\_freq & 150 steps & \texttt{train.py}    & $\approx$3 updates/episode \\
+  grad\_clip\_norm   & 10.0        & \texttt{train.py}    & Prevents gradient explosion \\
+  loss\_function     & SmoothL1    & \texttt{train.py}    & Robust to outlier Q-errors \\
+  training\_episodes & 300         & \texttt{train.py}    & Plateau reached by ep.\ 50 \\
+  steps\_per\_episode & 500        & \texttt{train.py}    & Training episode length \\
+  training\_intent   & OPPORTUNISTIC & \texttt{train.py}  & Broadest state coverage \\[6pt]
+
+  %% SEDM
+  \multicolumn{4}{l}{\textbf{SEDM Policy (\texttt{defender/matrix\_policy.py})}} \\[3pt]
+  esc\_low\_threshold  & 0.35      & \texttt{matrix\_policy.py} & Low/Medium band boundary \\
+  esc\_high\_threshold & 0.65      & \texttt{matrix\_policy.py} & Medium/High band boundary \\
+  rate\_threshold      & 0.80      & \texttt{matrix\_policy.py} & R3 override trigger (calibrated for window-mode escalation tracking, \S\,3.9, \S\,4.10) \\
+  high\_impact\_attacks & DOS, WORMS & \texttt{matrix\_policy.py} & R2 override trigger \\
+  default\_intent    & OPPORTUNISTIC & \texttt{matrix\_policy.py} & Fallback intent \\
+  reputation\_threshold & 0.60     & \texttt{matrix\_policy.py} & R4 override trigger --- new in this version, \S\,B.6 \\[6pt]
+
+  %% Classifier
+  \multicolumn{4}{l}{\textbf{Random Forest (\texttt{defender/classifier.py})}} \\[3pt]
+  n\_estimators      & 150         & \texttt{train.py}    & Ensemble size \\
+  max\_depth         & 20          & \texttt{train.py}    & Prevents overfitting \\
+  n\_jobs            & 1           & \texttt{train.py}    & Single-threaded \\
+  class\_weight      & balanced    & \texttt{classifier.py} & Handles class imbalance \\
+  scaler             & StandardScaler & \texttt{classifier.py} & Zero-mean, unit-variance \\
+  train\_samples/class & 600       & \texttt{train.py}    & 6\,000 total samples \\
+  eval\_samples/class  & 200       & \texttt{train.py}    & 2\,000 test samples \\
+  training\_seed     & 42          & \texttt{train.py}    & Reproducibility \\
+  eval\_seed         & 999         & \texttt{classifier.py} & Independent test set \\[6pt]
+
+  %% Environment
+  \multicolumn{4}{l}{\textbf{Environment (\texttt{environment/cyber\_env.py})}} \\[3pt]
+  train\_max\_steps    & 500       & \texttt{cyber\_env.py} & Training episode length \\
+  eval\_max\_steps     & 200 (original), 500 (revised, \S\,4.2) & \texttt{main.py}, \texttt{evaluate.py} & Evaluation episode length \\
+  escalation\_window   & 20 steps  & \texttt{cyber\_env.py} & Sliding window size \\
+  threat\_w\_severity  & 0.45      & \texttt{honeypot.py} & Dominant signal \\
+  threat\_w\_stage     & 0.35      & \texttt{honeypot.py} & Kill chain progress \\
+  threat\_w\_esc\_rate & 0.15      & \texttt{honeypot.py} & Campaign tempo \\
+  threat\_w\_count     & 0.05      & \texttt{honeypot.py} & Cumulative pressure \\
+  attack\_count\_norm  & 100       & \texttt{honeypot.py} & Saturation threshold \\[6pt]
+
+  %% Threat bands
+  \multicolumn{4}{l}{\textbf{Threat Bands (\texttt{defender/honeypot.py})}} \\[3pt]
+  benign threshold   & $< 0.15$    & \texttt{honeypot.py} & Very low severity \\
+  low threshold      & $0.15$--$0.35$ & \texttt{honeypot.py} & Reconnaissance-level \\
+  medium threshold   & $0.35$--$0.55$ & \texttt{honeypot.py} & Delivery-level \\
+  high threshold     & $0.55$--$0.75$ & \texttt{honeypot.py} & Exploitation-level \\
+  critical threshold & $\geq 0.75$ & \texttt{honeypot.py} & C2/AoO-level \\[6pt]
+
+  %% Evaluation
+  \multicolumn{4}{l}{\textbf{Evaluation (\texttt{main.py}, \texttt{evaluate.py})}} \\[3pt]
+  eval\_episodes     & 30 (original), 50 (revised primary, \S\,4.2) & \texttt{main.py}, \texttt{evaluate.py} & Per-intent episodes; SEM analysis (Table 4.8) \\
+  eval\_steps        & 200 (original), 500 (revised primary) & \texttt{main.py}, \texttt{evaluate.py} & Steps per eval episode \\
+  eval\_benign\_ratio & 0.0 (original), 0.3 (revised primary, \S\,4.2) & \texttt{evaluate.py} & Fraction of steps overridden with NORMAL-class traffic \\
+  random\_seed       & 42          & \texttt{main.py}     & Reproducibility \\[6pt]
+
+  %% Attacker
+  \multicolumn{4}{l}{\textbf{Attacker (\texttt{attacker/transition\_model.py})}} \\[3pt]
+  default\_intent    & OPPORTUNISTIC & \texttt{attacker.py} & Can be overridden \\
+  attacker\_seed     & 42          & \texttt{attacker.py} & Numpy random seed \\
+  kill\_chain\_floor & primary stage $-$ 1 & \texttt{attacker.py} & Prevents stage regression \\
+\end{longtable}
+
+\section{SEDM Matrix Values}
+
+Table~\ref{tab:sedm_full} lists the complete $7 \times 3$ Stage-Escalation
+Decision Matrix for reference.
+
+\begin{table}[ht]
+  \centering
+  \caption{Complete Stage-Escalation Decision Matrix.}
+  \label{tab:sedm_full}
+  \begin{tabular}{lp{2.2cm}p{2.2cm}p{2.2cm}}
+    \toprule
+    Kill Chain Stage & Low ($\rho < 0.35$) & Medium ($0.35 \leq \rho < 0.65$) & High ($\rho \geq 0.65$) \\
+    \midrule
+    RECONNAISSANCE   & ALLOW & LOG   & LOG   \\
+    WEAPONIZATION    & LOG   & LOG   & TROLL \\
+    DELIVERY         & LOG   & TROLL & TROLL \\
+    EXPLOITATION     & TROLL & BLOCK & BLOCK \\
+    INSTALLATION     & BLOCK & BLOCK & ALERT \\
+    COMMAND\_\&\_CTRL & BLOCK & ALERT & ALERT \\
+    ACTIONS\_ON\_OBJ & ALERT & ALERT & ALERT \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Override Rule Specifications}
+
+Four override rules are applied, in the following priority order, after the
+matrix lookup (extended in this version with R4, listed first per its
+evaluation priority --- \S\,3.4):
+
+\begin{enumerate}
+  \item \textbf{R4 (Cross-session reputation, new in this version)}: If the
+        requesting source's decayed cross-session reputation score
+        (\S\,B.6) is $\geq$ \texttt{REPUTATION\_THRESHOLD} (0.60), upgrade
+        the action by one level and stop. Checked \emph{before} R1.
+        Rationale: a source with sufficient accumulated offense history
+        should not regain unconditional trust via a single benign-looking
+        event.
+
+  \item \textbf{R1 (Normal traffic)}: If \texttt{AttackType} = NORMAL and R4
+        did not trigger, return ALLOW regardless of matrix result.
+        Rationale: confirmed benign traffic from a source with no
+        accumulated reputation is never blocked.
+
+  \item \textbf{R2 (High-impact attacks)}: If \texttt{AttackType} $\in$
+        \{DOS, WORMS\} and neither R4 nor R1 triggered, upgrade action by one
+        level in the sequence:
+        ALLOW $\to$ LOG $\to$ TROLL $\to$ BLOCK $\to$ ALERT.
+        Rationale: DOS and WORMS cause rapid, widespread damage requiring
+        an immediately escalated response.
+
+  \item \textbf{R3 (High attack rate)}: If escalation\_rate exceeds
+        \texttt{RATE\_THRESHOLD} (or the current value of an attached
+        \texttt{AdaptiveThresholds} controller, \S\,B.7) and no earlier rule
+        triggered, upgrade action by one level.
+        Rationale: sustained high-frequency attack activity indicates an
+        ongoing campaign that requires escalated containment.
+\end{enumerate}
+
+A system with \texttt{reputation} always equal to 0.0 --- the default
+everywhere except where \S\,4.11 states otherwise --- reproduces the
+original three-rule (R1, R2, R3) behaviour exactly, since R4's condition can
+never hold.
+
+\section{Reward Matrix Values}
+
+Table~\ref{tab:reward_full} lists the complete $5 \times 5$ base reward
+matrix (unchanged in this version).
+
+\begin{table}[ht]
+  \centering
+  \caption{Complete base reward matrix (action $\times$ threat band).}
+  \label{tab:reward_full}
+  \begin{tabular}{lccccc}
+    \toprule
+    Action & Benign ($<$0.15) & Low (0.15--0.35) & Medium (0.35--0.55) & High (0.55--0.75) & Critical ($\geq$0.75) \\
+    \midrule
+    ALLOW & $+1.0$ & $+0.5$ & $-1.0$ & $-3.0$ & $-6.0$ \\
+    LOG   & $+0.2$ & $+1.5$ & $+2.0$ & $+1.0$ & $-1.0$ \\
+    TROLL & $-1.0$ & $+1.0$ & $+3.0$ & $+2.5$ & $+0.5$ \\
+    BLOCK & $-2.0$ & $-0.5$ & $+1.5$ & $+3.5$ & $+5.0$ \\
+    ALERT & $-3.0$ & $-1.0$ & $+0.5$ & $+2.0$ & $+6.0$ \\
+    \bottomrule
+  \end{tabular}
+  \par\smallskip
+  \footnotesize Additional modifiers: late-stage amplifier ($1.5\times$ for negative rewards at
+  stages $\geq 4$); TROLL + BACKDOORS/SHELLCODE/WORMS ($+0.8$);
+  BLOCK + WORMS ($+1.0$); LOG + RECONNAISSANCE ($+0.5$);
+  ALLOW + non-attack ($+0.5$).
+\end{table}
+
+\section{Traffic-Realism Parameters (new in this version, \S\,3.2.4)}
+
+\begin{table}[ht]
+  \centering
+  \caption{Synthetic traffic realism parameters.}
+  \label{tab:traffic_realism}
+  \begin{tabular}{p{2.8cm}p{3.6cm}p{2.3cm}p{6.0cm}}
+    \toprule
+    Parameter & Default & Source & Rationale \\
+    \midrule
+    intensity\_lognormal\_sigma & 0.35 & \texttt{attack\_types.py} & Spread of the per-session volume multiplier --- wide enough for real variation, narrow enough that most sessions stay within $\sim 2\times$ the median \\
+    intensity\_scaled\_features & 8 features (\texttt{sbytes}, \texttt{dbytes}, \texttt{sload}, \texttt{dload}, \texttt{spkts}, \texttt{dpkts}, \texttt{ct\_srv\_src}, \texttt{ct\_dst\_ltm}) & \texttt{attack\_types.py} & Only volume-shaped features scale with intensity; TTL/window/duration/loss are not physically scaled by a session-level factor \\
+    normal\_persona\_weights & \texttt{casual\_user} 0.70, \texttt{crawler} 0.20, \texttt{monitoring\_probe} 0.10 & \texttt{attack\_types.py} & \texttt{casual\_user} dominant (matches a real human-majority traffic mix); the other two present but minority, avoiding overrepresentation of automated traffic \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Escalation-Tracking Parameters (new in this version, \S\,3.9)}
+
+\begin{table}[ht]
+  \centering
+  \caption{Window and EMA escalation-tracking parameters.}
+  \label{tab:escalation_tracking}
+  \begin{tabular}{p{2.8cm}p{3.6cm}p{2.3cm}p{6.0cm}}
+    \toprule
+    Parameter & Default & Source & Rationale \\
+    \midrule
+    escalation\_mode & "window" & \texttt{cyber\_env.py}, \texttt{session\_tracker.py} & Preserves exact prior behaviour; "ema" is opt-in pending the recalibration identified in \S\,5.6 \\
+    escalation\_ema\_alpha & 0.15 & \texttt{cyber\_env.py}, \texttt{session\_tracker.py} & $\sim$13-step effective memory ($1/\alpha$), comparable to the 20-step window it complements \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\section{Cross-Session Reputation Parameters (new in this version, \S\,3.10.1)}
+
+Table~\ref{tab:reputation_params} lists the \texttt{ReputationTracker}
+parameters. All are unvalidated defaults chosen for a reasonable
+behavioural shape (\S\,5.4) rather than fit to real attack-frequency data.
+
+\begin{table}[ht]
+  \centering
+  \caption{\texttt{ReputationTracker} parameters.}
+  \label{tab:reputation_params}
+  \begin{tabular}{p{2.8cm}p{3.6cm}p{2.3cm}p{6.0cm}}
+    \toprule
+    Parameter & Default & Source & Rationale \\
+    \midrule
+    offense\_increment & 0.25 & \texttt{reputation.py} & A single WORMS-severity (0.90) offense contributes $\approx 0.23$; several repeated high-severity offenses needed to cross the R4 threshold, not one \\
+    decay\_half\_life\_seconds & 21\,600 (6 h) & \texttt{reputation.py} & Long enough that a source does not ``reset'' between short breaks in activity; short enough that history does not accumulate forever \\
+    max\_score & 1.0 & \texttt{reputation.py} & Matches the $[0,1]$ convention used elsewhere (severity, escalation\_rate, escalation\_risk) \\
+    stale\_after\_seconds & 2\,592\,000 (30 d) & \texttt{reputation.py} & Bounds memory growth from one-off/scanner sources without needing a database \\
+    sweep\_interval\_seconds & 300 & \texttt{reputation.py} & Throttled sweep, same pattern as \texttt{SessionTracker}'s TTL expiry \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+\S\,4.11 measures the resulting behaviour precisely: under these defaults,
+reputation crosses \texttt{REPUTATION\_THRESHOLD} (0.60) at exactly the
+fourth prior EXPLOITS-severity ($s_a=0.70$) offense.
+
+\section{Bounded Threshold Controller Parameters (new in this version, \S\,3.10.2)}
+
+Table~\ref{tab:adaptive_thresholds_params} lists the
+\texttt{AdaptiveThresholds} parameters.
+
+\begin{table}[ht]
+  \centering
+  \caption{\texttt{AdaptiveThresholds} parameters.}
+  \label{tab:adaptive_thresholds_params}
+  \begin{tabular}{p{2.8cm}p{3.6cm}p{2.3cm}p{6.0cm}}
+    \toprule
+    Parameter & Default & Source & Rationale \\
+    \midrule
+    target\_rate & 0.10 & \texttt{adaptive\_thresholds.py} & R3 firing on $\sim$10\% of decisions is a reasonable ``not every step, not silent'' operational choice, not derived from data \\
+    tolerance & 0.03 & \texttt{adaptive\_thresholds.py} & Deadband width --- prevents the controller from chasing statistical noise in the observed rate \\
+    step & 0.01 & \texttt{adaptive\_thresholds.py} & Small relative to \texttt{RATE\_THRESHOLD}'s 0--1 range --- gradual correction \\
+    bound & 0.10 & \texttt{adaptive\_thresholds.py} & Caps total drift at $\pm 0.10$ from the initial threshold; \S\,4.12 shows this bound is the binding constraint under continuous-attack (saturated) conditions specifically \\
+    observation\_window & 200 & \texttt{adaptive\_thresholds.py} & Large enough to smooth over per-episode variance before nudging \\
+    \bottomrule
+  \end{tabular}
+\end{table}
+
+These five parameters govern an explicitly-scoped alert-fatigue safety
+valve, not a correctness mechanism (\S\,3.10.2) --- they should not be read
+as tuned against any detection-accuracy objective, because no such objective
+is computable in this system without a ground-truth feedback pathway that
+does not currently exist (\S\,5.3, \S\,5.6).
